@@ -8,7 +8,7 @@ build:
 	cd cmd && go build .
 
 run:
-	cd cmd && go run . /secret
+	time (cd cmd && go run . secret/ |sort -k1)
 
 checks: fmt-check
 

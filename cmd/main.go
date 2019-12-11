@@ -22,9 +22,10 @@ var sm sync.Map
 
 func main() {
 
+	flag.Usage = usage()
+
 	config := vault_api.DefaultConfig()
 	client, err := vault_api.NewClient(config)
-	flag.Usage = usage()
 
 	flag.Parse()
 
@@ -38,39 +39,28 @@ func main() {
 
 	init_path := os.Args[1]
 
+	// scope is global
 	Logical = client.Logical()
 
+	// launch a go routine per path traveled
 	deepDive(init_path)
+
+	//make the group wait until all paths are traveled
 	wg.Wait()
-	//spew.Dump(sm)
+
 	sm.Range(func(key, val interface{}) bool {
 		for k, v := range val.(map[string]interface{}) {
-			fmt.Printf("%s ] %s : %s \n", key, k, v)
+			fmt.Printf("[%s] = %s : %s \n", key, k, v)
 		}
 		return true
 	})
-	panic("OH")
-	dat, err := Logical.List(init_path)
-
-	if err != nil {
-		panic(err)
-		flag.Usage()
-	}
-
-	if dat == nil {
-		sec, _ := Logical.Read(init_path)
-		for k, v := range sec.Data {
-			fmt.Printf("%s : %s\n", k, v)
-		}
-	}
-
 }
 
 func deepDive(path string) {
-	wg.Add(1)
-	go func(wg *sync.WaitGroup, path string) {
 
-		//fmt.Printf("Doing path: %s\n", path)
+	wg.Add(1)
+
+	go func(wg *sync.WaitGroup, path string) {
 
 		path_additions, err := Logical.List(path)
 		if err != nil {
@@ -80,33 +70,28 @@ func deepDive(path string) {
 		if path_additions != nil {
 			for _, p := range path_additions.Data {
 				for _, k := range p.([]interface{}) {
-					//spew.Dump(k)
 					pathcheck := k.(string)
-					//fmt.Printf("PATHCHECK: %s\n", pathcheck)
 					lastfield := string(pathcheck[len(pathcheck)-1])
 					if strings.Compare(lastfield, "/") == 0 {
 						new_path := strings.Trim(path, "/") + "/" + k.(string)
 						deepDive(new_path)
-					} else {
+						continue
+					}
 
-						sec, err := Logical.Read(path + k.(string))
+					key_path := path + k.(string)
+					sec, err := Logical.Read(key_path)
 
-						if err != nil {
-							panic(err)
-						}
+					if err != nil {
+						panic(err)
+					}
 
-						if sec != nil {
-							sm.Store(path, sec.Data)
-							//for k, v := range sec.Data {
-							//fmt.Printf("path %s] %s : %s\n", path, k, v)
-							//}
-						}
-
+					if sec != nil {
+						sm.Store(key_path, sec.Data)
 					}
 				}
 			}
 		}
-		//fmt.Printf("DONE %s\n", path)
+
 		wg.Done()
 		return
 
