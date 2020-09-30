@@ -134,6 +134,16 @@ func toYaml(i interface{}) string {
 	return string(y)
 }
 
+func updatePathIfKVv2(c *vaultapi.Client, path string) string {
+	mountPath, v2, err := vault.IsKVv2(path, c)
+	checkErr(err, "error determining KV engine version")
+	if v2 {
+		path = vault.AddPrefixToVKVPath(path, mountPath, "metadata")
+		checkErr(err, "")
+	}
+	return path
+}
+
 func main() {
 
 	if viper.IsSet(debugFlag) {
@@ -153,14 +163,8 @@ func main() {
 		client.SetToken(viper.GetString(vtFlag))
 	}
 
-	// get inputPath from first non flag argument
 	inputPath := getPathFromInput(pflag.Arg(0))
-	mountPath, v2, err := vault.IsKVv2(inputPath, client)
-	checkErr(err, "error determining KV engine version")
-	if v2 {
-		inputPath = vault.AddPrefixToVKVPath(inputPath, mountPath, "metadata")
-		checkErr(err, "")
-	}
+	inputPath = updatePathIfKVv2(client, inputPath)
 
 	var sm sync.Map
 	findVaultSecrets(client, inputPath, &sm)
