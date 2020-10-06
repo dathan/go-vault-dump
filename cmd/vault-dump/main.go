@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -9,6 +10,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 	"gopkg.in/yaml.v2"
 
+	alsoyaml "github.com/ghodss/yaml"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -31,6 +33,8 @@ var (
 func init() {
 	pflag.String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	pflag.String(vtFlag, "", "vault token")
+	pflag.String("enc", "yaml", "encoding type [json, yaml]")
+	pflag.String("o", "stdout", "output type, [stdout, file]")
 	pflag.Bool("debug", false, "enables verbose messages")
 	pflag.CommandLine.ParseErrorsWhitelist.UnknownFlags = true
 	pflag.Parse()
@@ -115,17 +119,34 @@ func isDir(p string) bool {
 	return true
 }
 
-func printToStdOut(s *sync.Map) {
+func printToStdOut(s *sync.Map, o string) bool {
+	m := syncToMap(s)
+	switch o {
+	case "json":
+		fmt.Println(toJSON(m))
+	case "yaml":
+		fmt.Println(toYaml(m))
+	default:
+		debugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", o))
+		return false
+	}
+	return true
+}
+
+func syncToMap(s *sync.Map) map[interface{}]interface{} {
 	m := make(map[interface{}]interface{})
 	s.Range(func(key, val interface{}) bool {
-		// for k, v := range val.(map[string]interface{}) {
-		// 	fmt.Printf("[%s] = %s : %v \n", key, k, v)
-		// }
 		m[key] = val
-
 		return true
 	})
-	fmt.Println(toYaml(m))
+	return m
+}
+
+func toJSON(i interface{}) string {
+	y, err := yaml.Marshal(i)
+	j, err := alsoyaml.YAMLToJSON(y)
+	checkErr(err, "error when marshalling interface into []byte")
+	return string(j)
 }
 
 func toYaml(i interface{}) string {
@@ -142,6 +163,54 @@ func updatePathIfKVv2(c *vaultapi.Client, path string) string {
 		checkErr(err, "")
 	}
 	return path
+}
+
+func getPathForOutput(path string) string {
+	if path == "" {
+		path = "/tmp"
+	}
+	return vault.EnsureNoTrailingSlash(path)
+}
+
+func writeToFile(s *sync.Map, outputEncoding string) bool {
+	m := syncToMap(s)
+	inputPath := getPathFromInput(pflag.Arg(0))
+	outputPath := getPathForOutput(pflag.Arg(1))
+
+	fileName := fmt.Sprintf("%s/%s.%s", outputPath, inputPath, outputEncoding)
+
+	switch outputEncoding {
+	case "json":
+		_ = writeFile(toJSON(m), fileName)
+	case "yaml":
+		_ = writeFile(toYaml(m), fileName)
+	default:
+		debugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", outputEncoding))
+		return false
+	}
+	return true
+}
+
+func writeFile(data, path string) bool {
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Println(err)
+		f.Close()
+		return false
+	}
+
+	b, err := f.WriteString(data)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	debugMsg(string(b) + " bytes written successfully\n")
+
+	err = f.Close()
+	checkErr(err, "failed to close file!")
+
+	fmt.Println("file written successfully to " + path)
+	return true
 }
 
 func main() {
@@ -170,6 +239,29 @@ func main() {
 	findVaultSecrets(client, inputPath, &sm)
 	wg.Wait()
 
-	printToStdOut(&sm)
+	outputEncoding, _ := getOutputEncoding(viper.GetString("enc"))
+	processOutput(&sm, outputEncoding, viper.GetString("o"))
 
+}
+
+func getOutputEncoding(encodingType string) (string, bool) {
+	switch encodingType {
+	case "yaml":
+		return "yaml", false
+	case "json":
+		return "json", false
+	default:
+		panic(fmt.Sprintf("Unexpected encoding type %s. ", encodingType))
+	}
+}
+
+func processOutput(s *sync.Map, et string, ot string) {
+	switch ot {
+	case "file":
+		writeToFile(s, et)
+	case "stdout":
+		printToStdOut(s, et)
+	default:
+		panic(fmt.Sprintf("Unexpected output type %s. ", ot))
+	}
 }
