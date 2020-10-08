@@ -18,16 +18,28 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var Debug bool
+// Config
+type Config struct {
+	Debug        bool
+	Client       *vaultapi.Client
+	inputPath    string
+	outputPath   string
+	encodingType string
+	outputType   string
+}
 
-func getOutputEncoding(encodingType string) (string, bool) {
+func (c *Config) GetOutputEncoding() string {
+	return c.encodingType
+}
+
+func validateOutputEncoding(encodingType string) (string, bool) {
 	switch encodingType {
 	case "yaml":
-		return "yaml", false
+		return "yaml", true
 	case "json":
-		return "json", false
+		return "json", true
 	default:
-		panic(fmt.Sprintf("Unexpected encoding type %s. ", encodingType))
+		return "", false
 	}
 }
 
@@ -47,7 +59,7 @@ func printToStdOut(s *sync.Map, o string) bool {
 	case "yaml":
 		fmt.Println(toYaml(m))
 	default:
-		DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", o))
+		// DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", o))
 		return false
 	}
 	return true
@@ -98,7 +110,7 @@ func writeFile(data, path string) bool {
 		fmt.Println(err)
 		return false
 	}
-	DebugMsg(string(b) + " bytes written successfully\n")
+	fmt.Println(string(b) + " bytes written successfully\n")
 
 	err = f.Close()
 	CheckErr(err, "failed to close file!")
@@ -118,7 +130,7 @@ func writeToFile(s *sync.Map, outputEncoding, inputPath, outputPath string) bool
 	case "yaml":
 		_ = writeFile(toYaml(m), fileName)
 	default:
-		DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", outputEncoding))
+		// DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", outputEncoding))
 		return false
 	}
 	return true
@@ -137,19 +149,19 @@ func CheckErr(e error, msg string) {
 
 // DebugMsg is a helper function that prints the message
 // if the debug flag is set
-func DebugMsg(msg string) {
-	if Debug {
+func (c *Config) DebugMsg(msg string) {
+	if c.Debug {
 		fmt.Println(msg)
 	}
 }
 
 // FindVaultSecrets
-func FindVaultSecrets(c *vaultapi.Client, path string, smPointer *sync.Map, wgPointer *sync.WaitGroup) {
+func FindVaultSecrets(c *Config, path string, smPointer *sync.Map, wgPointer *sync.WaitGroup) {
 	wgPointer.Add(1)
-	DebugMsg(path)
+	c.DebugMsg(path)
 
 	go func(wg *sync.WaitGroup, path string) {
-		secret, err := c.Logical().List(path)
+		secret, err := c.Client.Logical().List(path)
 		CheckErr(err, "error listing path")
 
 		if secret == nil || secret.Data == nil {
@@ -168,9 +180,9 @@ func FindVaultSecrets(c *vaultapi.Client, path string, smPointer *sync.Map, wgPo
 				} else {
 					// reconciling v2 secret engine requirement for list operation
 					keyPath := strings.Replace(newPath, "metadata", "data", 1)
-					DebugMsg(fmt.Sprintf("processing a secret at %s", keyPath))
+					c.DebugMsg(fmt.Sprintf("processing a secret at %s", keyPath))
 
-					sec, err := c.Logical().Read(keyPath)
+					sec, err := c.Client.Logical().Read(keyPath)
 					CheckErr(err, "")
 
 					if sec != nil {
@@ -202,16 +214,54 @@ func GetPathFromInput(c *vaultapi.Client, input string) string {
 	return vault.EnsureNoTrailingSlash(u)
 }
 
+func validateOutputType(outputType string) (string, bool) {
+	if outputType == "file" || outputType == "stdout" {
+		return outputType, true
+	}
+	return "", false
+}
+
 // ProcessOutput takes action based on inputs to complete the
 // desired output result
-func ProcessOutput(s *sync.Map, et, ot, in, out string) {
-	oe, _ := getOutputEncoding(et)
-	switch ot {
+func ProcessOutput(c *Config, s *sync.Map) {
+	switch c.outputType {
 	case "file":
-		writeToFile(s, oe, in, out)
+		writeToFile(s, c.encodingType, c.inputPath, c.outputType)
 	case "stdout":
-		printToStdOut(s, oe)
+		printToStdOut(s, c.GetOutputEncoding())
 	default:
-		panic(fmt.Sprintf("Unexpected output type %s. ", ot))
+		panic(fmt.Sprintf("Unexpected output type %s. ", c.outputType))
 	}
+}
+
+// GetInputPath
+func (c *Config) GetInput() string {
+	return c.inputPath
+}
+
+// GetOutputPath
+func (c *Config) GetOutput() string {
+	return c.outputPath
+}
+
+// SetInputPath
+func (c *Config) SetInput(i string) {
+	c.inputPath = GetPathFromInput(c.Client, i)
+}
+
+// SetOutputPath
+func (c *Config) SetOutput(outputPath, encoding, outputType string) {
+	c.outputPath = GetPathForOutput(outputPath)
+
+	et, ok := validateOutputEncoding(encoding)
+	if !ok {
+		panic(fmt.Sprintf("Unexpected encoding type %s. ", encoding))
+	}
+	c.encodingType = et
+
+	ot, ok := validateOutputType(outputType)
+	if !ok {
+		c.DebugMsg(fmt.Sprintf("Unexpected output type %s. ", outputType))
+	}
+	c.outputType = ot
 }
