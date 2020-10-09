@@ -49,7 +49,7 @@ func ToKube(c *Config, s *sync.Map) {
 		m[key] = val
 		return true
 	})
-	fmt.Printf("There are %d secrets in the mountpath\n", len(m))
+	c.DebugMsg(fmt.Sprintf("There are %d secrets in the mountpath\n", len(m)))
 	for k, v := range m {
 
 		createOrModifySecret(kClient, k.(string), v.(map[string]interface{})) // type assertion syntax
@@ -57,12 +57,12 @@ func ToKube(c *Config, s *sync.Map) {
 }
 
 func createOrModifySecret(client *kubernetes.Clientset, key string, value map[string]interface{}) {
-	fmt.Println(key)
-	fmt.Println(value["data"])
+	// fmt.Println(key)
+	// fmt.Println(value["data"])
 	secretMap := make(map[string]string)
 	for k, v := range value["data"].(map[string]interface{}) {
 		// convert to map[string]string
-		secretMap[k] = v.(string)
+		secretMap[strings.ToUpper(k)] = v.(string)
 	}
 	// fmt.Println(secretMap)
 	// for i, j := range secretMap {
@@ -78,15 +78,16 @@ func createOrModifySecret(client *kubernetes.Clientset, key string, value map[st
 	}
 	secretExists, err := client.CoreV1().Secrets("default").Get(context.TODO(), secretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		fmt.Println("DOESNT EXIST")
+		fmt.Println(fmt.Sprintf("K8s secret %s not found, creating...", kSecret.Name))
 		_, err := client.CoreV1().Secrets("default").Create(context.TODO(), &kSecret, metav1.CreateOptions{})
 		CheckErr(err, "failed to create new secret")
 	} else if err != nil {
 		CheckErr(err, "failed to get secret with name "+secretName)
 	}
 
-	for k1, v1 := range secretExists.Data {
-		fmt.Println(fmt.Sprintf("key: %s, value: %s", k1, string(v1)))
+	// merge vault secret into kube secret, overriding k8s secrets if force flag is set, otherwise fail due to existing key values that do not match
+	for k1, _ := range secretExists.Data {
+		fmt.Println(fmt.Sprintf("secret: %s,\tkey: %s", key, k1))
 	}
 
 }
