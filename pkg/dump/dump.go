@@ -214,11 +214,14 @@ func GetPathFromInput(c *vaultapi.Client, input string) string {
 	return vault.EnsureNoTrailingSlash(u)
 }
 
-func validateOutputType(outputType string) (string, bool) {
-	if outputType == "file" || outputType == "stdout" {
+func ValidateOutputType(outputType string) (string, bool) {
+	switch outputType {
+	case "file", "stdout", "k8s":
 		return outputType, true
+	default:
+		return "", false
 	}
-	return "", false
+
 }
 
 // ProcessOutput takes action based on inputs to complete the
@@ -259,7 +262,7 @@ func (c *Config) SetOutput(outputPath, encoding, outputType string) {
 	}
 	c.encodingType = et
 
-	ot, ok := validateOutputType(outputType)
+	ot, ok := ValidateOutputType(outputType)
 	if !ok {
 		c.DebugMsg(fmt.Sprintf("Unexpected output type %s. ", outputType))
 	}
