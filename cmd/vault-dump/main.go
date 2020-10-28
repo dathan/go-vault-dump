@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 
@@ -51,9 +53,12 @@ func init() {
 }
 
 func main() {
-
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	client, err := vaultapi.NewClient(vaultapi.DefaultConfig())
-	dump.CheckErr(err, "failed vault client init")
+	if err != nil {
+		log.Println("failed vault client init: " + err.Error())
+		os.Exit(1)
+	}
 	config := &dump.Config{
 		Debug:  viper.GetBool(debugFlag),
 		Client: client,
@@ -64,15 +69,24 @@ func main() {
 	config.SetInput(pflag.Arg(0))
 	config.SetOutput(pflag.Arg(1), viper.GetString("enc"), viper.GetString("o"))
 
-	var sm sync.Map
-	var wg sync.WaitGroup
-	dump.FindVaultSecrets(config, config.GetInput(), &sm, &wg)
+	var (
+		sm sync.Map
+		wg sync.WaitGroup
+	)
+
+	if err := dump.FindVaultSecrets(config, config.GetInput(), &sm, &wg); err != nil {
+		log.Println(err.Error())
+		os.Exit(1)
+	}
 	wg.Wait()
 
 	vo, _ := dump.ValidateOutputType(viper.GetString("o"))
 	switch vo {
 	case "k8s":
-		dump.ToKube(config, &sm)
+		if err := dump.ToKube(config, &sm); err != nil {
+			log.Println(err.Error())
+			os.Exit(1)
+		}
 	default:
 		dump.ProcessOutput(config, &sm)
 	}

@@ -18,7 +18,7 @@ require (
 	golang.org/x/sys v0.0.0-20200828194041-157a740278f4 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
-	google.golang.org/protobuf v1.25.0 // indirect
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2

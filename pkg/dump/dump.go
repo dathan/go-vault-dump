@@ -7,6 +7,7 @@ package dump
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -74,25 +75,33 @@ func syncToMap(s *sync.Map) map[interface{}]interface{} {
 	return m
 }
 
-func toJSON(i interface{}) string {
+func toJSON(i interface{}) (string, error) {
 	y, err := yaml.Marshal(i)
 	j, err := alsoyaml.YAMLToJSON(y)
-	CheckErr(err, "error when marshalling interface into []byte")
-	return string(j)
+	if err != nil {
+		return "", fmt.Errorf("error when marshalling interface into []byte: %w", err)
+	}
+
+	return string(j), nil
 }
 
-func toYaml(i interface{}) string {
+func toYaml(i interface{}) (string, error) {
 	y, err := yaml.Marshal(i)
-	CheckErr(err, "error when marshalling interface into []byte")
-	return string(y)
+	if err != nil {
+		return "", fmt.Errorf("error when marshalling interface into []byte: %w", err)
+	}
+
+	return string(y), nil
 }
 
 func updatePathIfKVv2(c *vaultapi.Client, path string) string {
 	mountPath, v2, err := vault.IsKVv2(path, c)
-	CheckErr(err, "error determining KV engine version")
+	if err != nil {
+		log.Panicln(err, "error determining KV engine version")
+	}
+
 	if v2 {
 		path = vault.AddPrefixToVKVPath(path, mountPath, "metadata")
-		CheckErr(err, "")
 	}
 	return path
 }
@@ -100,22 +109,24 @@ func updatePathIfKVv2(c *vaultapi.Client, path string) string {
 func writeFile(data, path string) bool {
 	f, err := os.Create(path)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		f.Close()
 		return false
 	}
 
 	b, err := f.WriteString(data)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return false
 	}
-	fmt.Println(string(b) + " bytes written successfully\n")
+	log.Println(string(b) + " bytes written successfully\n")
 
-	err = f.Close()
-	CheckErr(err, "failed to close file!")
+	if err = f.Close(); err != nil {
+		log.Printf("failed to close file, %s", err.Error())
+		return false
+	}
 
-	fmt.Println("file written successfully to " + path)
+	log.Println("file written successfully to " + path)
 	return true
 }
 
@@ -126,9 +137,17 @@ func writeToFile(s *sync.Map, outputEncoding, inputPath, outputPath string) bool
 
 	switch outputEncoding {
 	case "json":
-		_ = writeFile(toJSON(m), fileName)
+		j, e := toJSON(m)
+		if e != nil {
+			return false
+		}
+		_ = writeFile(j, fileName)
 	case "yaml":
-		_ = writeFile(toYaml(m), fileName)
+		y, e := toYaml(m)
+		if e != nil {
+			return false
+		}
+		_ = writeFile(y, fileName)
 	default:
 		// DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", outputEncoding))
 		return false
@@ -136,64 +155,78 @@ func writeToFile(s *sync.Map, outputEncoding, inputPath, outputPath string) bool
 	return true
 }
 
-// CheckErr is a helper function that panics if the
-// error is not passed and prints the msg string before
-func CheckErr(e error, msg string) {
-	if e != nil {
-		if msg != "" {
-			fmt.Println(msg)
-		}
-		panic(e)
-	}
-}
-
 // DebugMsg is a helper function that prints the message
 // if the debug flag is set
 func (c *Config) DebugMsg(msg string) {
 	if c.Debug {
-		fmt.Println(msg)
+		log.Println(msg)
 	}
 }
 
 // FindVaultSecrets
-func FindVaultSecrets(c *Config, path string, smPointer *sync.Map, wgPointer *sync.WaitGroup) {
+func FindVaultSecrets(c *Config, path string, smPointer *sync.Map, wgPointer *sync.WaitGroup) error {
 	wgPointer.Add(1)
 	c.DebugMsg(path)
 
-	go func(wg *sync.WaitGroup, path string) {
-		secret, err := c.Client.Logical().List(path)
-		CheckErr(err, "error listing path")
+	errChan := make(chan error, 1)
+	go walker(path, c, smPointer, wgPointer, errChan)
 
-		if secret == nil || secret.Data == nil {
-			panic(fmt.Sprintf("No value found at %s", path))
+	wgPointer.Wait()
+	close(errChan)
+	return <-errChan
+}
+
+func walker(path string, c *Config, sm *sync.Map, wg *sync.WaitGroup, errChan chan error) {
+	defer wg.Done()
+
+	secret, err := c.Client.Logical().List(path)
+	if err != nil {
+		select {
+		case errChan <- err:
+			log.Println("error listing path, " + err.Error())
+		default:
+			log.Println("another error occurred, " + err.Error())
 		}
+	}
 
-		if _, ok := vault.ExtractListData(secret); !ok {
-			panic(fmt.Sprintf("No entries found at %s", path))
+	if secret == nil || secret.Data == nil {
+		select {
+		case errChan <- err:
+			log.Printf("No value found at %s\n", path)
+		default:
+			log.Println("another error occurred")
 		}
-
+	} else if _, ok := vault.ExtractListData(secret); !ok {
+		select {
+		case errChan <- err:
+			log.Printf("No entries found at %s\n", path)
+		default:
+			log.Println("another error occurred")
+		}
+	} else {
 		for _, p := range secret.Data {
 			for _, k := range p.([]interface{}) {
 				newPath := path + "/" + k.(string)
 				if isDir(k.(string)) { // type assertion
-					FindVaultSecrets(c, vault.EnsureNoTrailingSlash(newPath), smPointer, wg)
+					FindVaultSecrets(c, vault.EnsureNoTrailingSlash(newPath), sm, wg)
 				} else {
 					// reconciling v2 secret engine requirement for list operation
 					keyPath := strings.Replace(newPath, "metadata", "data", 1)
 					c.DebugMsg(fmt.Sprintf("processing a secret at %s", keyPath))
 
 					sec, err := c.Client.Logical().Read(keyPath)
-					CheckErr(err, "")
+					if err != nil {
+						log.Printf("failed to get secrets from %s, %s\n", keyPath, err.Error())
+					}
 
 					if sec != nil {
-						smPointer.Store(keyPath, sec.Data)
+						sm.Store(keyPath, sec.Data)
 					}
 
 				}
 			}
 		}
-		wg.Done()
-	}(wgPointer, path)
+	}
 }
 
 // GetPathForOutput
@@ -233,7 +266,7 @@ func ProcessOutput(c *Config, s *sync.Map) {
 	case "stdout":
 		printToStdOut(s, c.GetOutputEncoding())
 	default:
-		panic(fmt.Sprintf("Unexpected output type %s. ", c.outputType))
+		log.Panicf("Unexpected output type %s\n", c.outputType)
 	}
 }
 
@@ -258,7 +291,7 @@ func (c *Config) SetOutput(outputPath, encoding, outputType string) {
 
 	et, ok := validateOutputEncoding(encoding)
 	if !ok {
-		panic(fmt.Sprintf("Unexpected encoding type %s. ", encoding))
+		log.Panicf("Unexpected encoding type %s. \n", encoding)
 	}
 	c.encodingType = et
 
