@@ -73,8 +73,8 @@ func main() {
 		sm sync.Map
 		wg sync.WaitGroup
 	)
-
-	if err := dump.FindVaultSecrets(config, config.GetInput(), &sm, &wg); err != nil {
+	m := make(map[interface{}]interface{})
+	if err := dump.FindVaultSecrets2(config, config.GetInput(), m, &wg); err != nil {
 		log.Println(err.Error())
 		os.Exit(1)
 	}
@@ -88,7 +88,7 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		dump.ProcessOutput(config, &sm)
+		// dump.ProcessOutput(config, m)
+		dump.Output(config, m)
 	}
-
 }

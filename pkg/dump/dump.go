@@ -6,6 +6,7 @@ package dump
 // like it does not if your token is not granted access to see it
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -52,8 +53,7 @@ func isDir(p string) bool {
 	return true
 }
 
-func printToStdOut(s *sync.Map, o string) bool {
-	m := syncToMap(s)
+func printToStdOut(m map[interface{}]interface{}, o string) bool {
 	switch o {
 	case "json":
 		fmt.Println(toJSON(m))
@@ -130,8 +130,7 @@ func writeFile(data, path string) bool {
 	return true
 }
 
-func writeToFile(s *sync.Map, outputEncoding, inputPath, outputPath string) bool {
-	m := syncToMap(s)
+func writeToFile(m map[interface{}]interface{}, outputEncoding, inputPath, outputPath string) bool {
 
 	fileName := fmt.Sprintf("%s/%s.%s", outputPath, inputPath, outputEncoding)
 
@@ -173,7 +172,69 @@ func FindVaultSecrets(c *Config, path string, smPointer *sync.Map, wgPointer *sy
 
 	wgPointer.Wait()
 	close(errChan)
-	return <-errChan
+	return errors.New("always an err")
+}
+
+func FindVaultSecrets2(c *Config, path string, m map[interface{}]interface{}, wg *sync.WaitGroup) error {
+	pathErrChan := make(chan error, 1)
+	secretsChan := make(chan string, 1000)
+	secretErrChan := make(chan error, 1)
+
+	go pathfinder(path, c, secretsChan, pathErrChan)
+	go getSecret(c, m, secretsChan, secretErrChan)
+	wg.Wait()
+	return nil
+}
+
+// pathfinder adds the location of secrets to the secrets buffered channel
+func pathfinder(path string, config *Config, secretChan chan string, errorChan chan error) {
+	location, err := config.Client.Logical().List(path)
+	if err != nil {
+		select {
+		case errorChan <- err:
+			log.Println("error listing path, " + err.Error())
+		default:
+			log.Println("another error occurred, " + err.Error())
+			return
+		}
+	} else if location == nil || location.Data == nil {
+		select {
+		case errorChan <- err:
+			log.Printf("No value found at %s\n", path)
+		default:
+			log.Println("another error occurred")
+		}
+	} else {
+		for _, i := range location.Data {
+			for _, k := range i.([]interface{}) {
+				newPath := path + "/" + k.(string)
+				if isDir(k.(string)) { // type assertion
+					pathfinder(vault.EnsureNoTrailingSlash(newPath), config, secretChan, errorChan)
+				} else {
+					// reconciling v2 secret engine requirement for list operation
+					keyPath := strings.Replace(newPath, "metadata", "data", 1)
+					config.DebugMsg(fmt.Sprintf("found a secret at %s", keyPath))
+					secretChan <- keyPath
+				}
+			}
+		}
+	}
+}
+
+func getSecret(config *Config, m map[interface{}]interface{}, secretChan chan string, errorChan chan error) {
+	keyPath := <-secretChan
+	secret, err := config.Client.Logical().Read(keyPath)
+	if err != nil {
+		log.Printf("failed to get secrets from %s, %s\n", keyPath, err.Error())
+		errorChan <- err
+		return
+	}
+
+	if secret != nil {
+		fmt.Println(keyPath)
+		m[keyPath] = secret.Data
+	}
+
 }
 
 func walker(path string, c *Config, sm *sync.Map, wg *sync.WaitGroup, errChan chan error) {
@@ -208,7 +269,7 @@ func walker(path string, c *Config, sm *sync.Map, wg *sync.WaitGroup, errChan ch
 			for _, k := range p.([]interface{}) {
 				newPath := path + "/" + k.(string)
 				if isDir(k.(string)) { // type assertion
-					FindVaultSecrets(c, vault.EnsureNoTrailingSlash(newPath), sm, wg)
+					walker(vault.EnsureNoTrailingSlash(newPath), c, sm, wg, errChan)
 				} else {
 					// reconciling v2 secret engine requirement for list operation
 					keyPath := strings.Replace(newPath, "metadata", "data", 1)
@@ -240,7 +301,7 @@ func GetPathForOutput(path string) string {
 // GetPathFromInput
 func GetPathFromInput(c *vaultapi.Client, input string) string {
 	if input == "" {
-		panic("missing input path from command line")
+		log.Panic("missing input path from command line")
 	}
 	u := updatePathIfKVv2(c, vault.SanitizePath(input))
 
@@ -254,20 +315,24 @@ func ValidateOutputType(outputType string) (string, bool) {
 	default:
 		return "", false
 	}
-
 }
 
 // ProcessOutput takes action based on inputs to complete the
 // desired output result
 func ProcessOutput(c *Config, s *sync.Map) {
+	m := syncToMap(s)
 	switch c.outputType {
 	case "file":
-		writeToFile(s, c.encodingType, c.inputPath, c.outputType)
+		writeToFile(m, c.encodingType, c.inputPath, c.outputType)
 	case "stdout":
-		printToStdOut(s, c.GetOutputEncoding())
+		printToStdOut(m, c.GetOutputEncoding())
 	default:
 		log.Panicf("Unexpected output type %s\n", c.outputType)
 	}
+}
+
+func Output(c *Config, m map[interface{}]interface{}) {
+	printToStdOut(m, c.GetOutputEncoding())
 }
 
 // GetInputPath

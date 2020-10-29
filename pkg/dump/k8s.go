@@ -47,7 +47,7 @@ func ToKube(c *Config, s *sync.Map) error {
 
 	secrets, _ := kClient.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{})
 
-	fmt.Printf("There are %d secrets in the cluster\n", len(secrets.Items))
+	log.Printf("There are %d secrets in the cluster\n", len(secrets.Items))
 
 	m := make(map[interface{}]interface{})
 	s.Range(func(key, val interface{}) bool {
