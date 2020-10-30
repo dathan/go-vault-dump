@@ -38,7 +38,6 @@ func (s *SecretScraper) New(vault *vaultapi.Client) SecretScraper {
 
 // Start creates n number of workers
 func (s *SecretScraper) Start(n int, path string) {
-
 	s.climber(path)
 	close(s.leafStream)
 
@@ -97,20 +96,28 @@ func (s *SecretScraper) climber(path string) {
 func (s *SecretScraper) getSecretFromLeafStream(ctx context.Context, id int) {
 	defer s.waitgroup.Done()
 
-	leaf := <-s.leafStream
-	// reconciling v2 secret engine requirement for list operation
-	path := strings.Replace(leaf, "metadata", "data", 1)
+	for leaf := range s.leafStream {
+		select {
+		case <-s.errorChan:
+			return
+		default:
+		}
 
-	vaultSecret, err := s.vault.Logical().Read(path)
-	if err != nil {
-		log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
-	}
+		// reconciling v2 secret engine requirement for list operation
+		path := strings.Replace(leaf, "metadata", "data", 1)
 
-	secret := secret{
-		path: path,
-		data: vaultSecret.Data["data"],
+		vaultSecret, err := s.vault.Logical().Read(path)
+		if err != nil {
+			log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
+			s.errorChan <- err
+		}
+
+		secret := secret{
+			path: path,
+			data: vaultSecret.Data["data"],
+		}
+		s.secretStream <- secret
 	}
-	s.secretStream <- secret
 }
 
 func (s *SecretScraper) ProcessOutput(c *Config) {

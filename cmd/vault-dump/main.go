@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/dathan/go-vault-dump/pkg/dump"
@@ -66,7 +67,7 @@ func main() {
 	secretScraper := ss.New(vaultClient)
 
 	path := config.GetInput()
-	secretScraper.Start(2, path)
+	secretScraper.Start(runtime.GOMAXPROCS(0), path)
 
 	secretScraper.ProcessOutput(config)
 }
