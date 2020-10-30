@@ -17,12 +17,6 @@ const debugFlag = "debug"
 const vaFlag = "vault-addr"
 const vtFlag = "vault-token"
 
-/**
- * Auth with VAULT using common environment flags
- * List all the keys
- * recursively print out the values for each key
- */
-
 func init() {
 	pflag.String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	pflag.String(vtFlag, "", "vault token")
