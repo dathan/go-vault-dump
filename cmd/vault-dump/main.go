@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/dathan/go-vault-dump/pkg/dump"
 	vaultapi "github.com/hashicorp/vault/api"
@@ -54,41 +53,26 @@ func init() {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	client, err := vaultapi.NewClient(vaultapi.DefaultConfig())
+	vaultClient, err := vaultapi.NewClient(vaultapi.DefaultConfig())
 	if err != nil {
 		log.Println("failed vault client init: " + err.Error())
 		os.Exit(1)
 	}
+	vaultClient.SetAddress(viper.GetString(vaFlag))
+	vaultClient.SetToken(viper.GetString(vtFlag))
+
 	config := &dump.Config{
 		Debug:  viper.GetBool(debugFlag),
-		Client: client,
+		Client: vaultClient,
 	}
-
-	config.Client.SetAddress(viper.GetString(vaFlag))
-	config.Client.SetToken(viper.GetString(vtFlag))
 	config.SetInput(pflag.Arg(0))
 	config.SetOutput(pflag.Arg(1), viper.GetString("enc"), viper.GetString("o"))
 
-	var (
-		sm sync.Map
-		wg sync.WaitGroup
-	)
-	m := make(map[interface{}]interface{})
-	if err := dump.FindVaultSecrets2(config, config.GetInput(), m, &wg); err != nil {
-		log.Println(err.Error())
-		os.Exit(1)
-	}
-	wg.Wait()
+	ss := dump.SecretScraper{}
+	secretScraper := ss.New(vaultClient)
 
-	vo, _ := dump.ValidateOutputType(viper.GetString("o"))
-	switch vo {
-	case "k8s":
-		if err := dump.ToKube(config, &sm); err != nil {
-			log.Println(err.Error())
-			os.Exit(1)
-		}
-	default:
-		// dump.ProcessOutput(config, m)
-		dump.Output(config, m)
-	}
+	path := config.GetInput()
+	secretScraper.Start(2, path)
+
+	secretScraper.ProcessOutput(config)
 }
