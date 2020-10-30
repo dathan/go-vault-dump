@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"sync"
 
 	vaultapi "github.com/hashicorp/vault/api"
 
@@ -21,16 +20,12 @@ import (
 
 // Config
 type Config struct {
-	Debug        bool
-	Client       *vaultapi.Client
-	inputPath    string
-	outputPath   string
-	encodingType string
-	outputType   string
-}
-
-func (c *Config) GetOutputEncoding() string {
-	return c.encodingType
+	Debug          bool
+	Client         *vaultapi.Client
+	inputPath      string
+	outputPath     string
+	outputEncoding string
+	outputType     string
 }
 
 func validateOutputEncoding(encodingType string) (string, bool) {
@@ -52,27 +47,25 @@ func isDir(p string) bool {
 	return true
 }
 
-func printToStdOut(s *sync.Map, o string) bool {
-	m := syncToMap(s)
-	switch o {
+func (c *Config) printToStdOut(m map[string]interface{}) bool {
+	switch c.outputEncoding {
 	case "json":
-		fmt.Println(toJSON(m))
+		j, e := toJSON(m)
+		if e != nil {
+			return false
+		}
+		fmt.Println(j)
 	case "yaml":
-		fmt.Println(toYaml(m))
+		y, e := toYaml(m)
+		if e != nil {
+			return false
+		}
+		fmt.Println(toYaml(y))
 	default:
-		// DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", o))
+		log.Printf("Unexpected input %s. writeToFile only understands json and yaml", c.outputEncoding)
 		return false
 	}
 	return true
-}
-
-func syncToMap(s *sync.Map) map[interface{}]interface{} {
-	m := make(map[interface{}]interface{})
-	s.Range(func(key, val interface{}) bool {
-		m[key] = val
-		return true
-	})
-	return m
 }
 
 func toJSON(i interface{}) (string, error) {
@@ -130,12 +123,11 @@ func writeFile(data, path string) bool {
 	return true
 }
 
-func writeToFile(s *sync.Map, outputEncoding, inputPath, outputPath string) bool {
-	m := syncToMap(s)
+func (c *Config) writeToFile(m map[string]interface{}) bool {
+	inputPath := vault.SanitizePath(strings.Replace(c.inputPath, "metadata", "", 1))
+	fileName := fmt.Sprintf("%s/%s.%s", c.outputPath, inputPath, c.outputEncoding)
 
-	fileName := fmt.Sprintf("%s/%s.%s", outputPath, inputPath, outputEncoding)
-
-	switch outputEncoding {
+	switch c.outputEncoding {
 	case "json":
 		j, e := toJSON(m)
 		if e != nil {
@@ -149,7 +141,7 @@ func writeToFile(s *sync.Map, outputEncoding, inputPath, outputPath string) bool
 		}
 		_ = writeFile(y, fileName)
 	default:
-		// DebugMsg(fmt.Sprintf("Unexpected input %s. writeToFile only understands json and yaml", outputEncoding))
+		log.Printf("Unexpected input %s. writeToFile only understands json and yaml", c.outputEncoding)
 		return false
 	}
 	return true
@@ -163,69 +155,18 @@ func (c *Config) DebugMsg(msg string) {
 	}
 }
 
-// FindVaultSecrets
-func FindVaultSecrets(c *Config, path string, smPointer *sync.Map, wgPointer *sync.WaitGroup) error {
-	wgPointer.Add(1)
-	c.DebugMsg(path)
-
-	errChan := make(chan error, 1)
-	go walker(path, c, smPointer, wgPointer, errChan)
-
-	wgPointer.Wait()
-	close(errChan)
-	return <-errChan
-}
-
-func walker(path string, c *Config, sm *sync.Map, wg *sync.WaitGroup, errChan chan error) {
-	defer wg.Done()
-
-	secret, err := c.Client.Logical().List(path)
+func getSecret(config *Config, m map[interface{}]interface{}, secretChan chan string, errorChan chan error) {
+	keyPath := <-secretChan
+	secret, err := config.Client.Logical().Read(keyPath)
 	if err != nil {
-		select {
-		case errChan <- err:
-			log.Println("error listing path, " + err.Error())
-		default:
-			log.Println("another error occurred, " + err.Error())
-		}
+		log.Printf("failed to get secrets from %s, %s\n", keyPath, err.Error())
+		errorChan <- err
+		return
 	}
 
-	if secret == nil || secret.Data == nil {
-		select {
-		case errChan <- err:
-			log.Printf("No value found at %s\n", path)
-		default:
-			log.Println("another error occurred")
-		}
-	} else if _, ok := vault.ExtractListData(secret); !ok {
-		select {
-		case errChan <- err:
-			log.Printf("No entries found at %s\n", path)
-		default:
-			log.Println("another error occurred")
-		}
-	} else {
-		for _, p := range secret.Data {
-			for _, k := range p.([]interface{}) {
-				newPath := path + "/" + k.(string)
-				if isDir(k.(string)) { // type assertion
-					FindVaultSecrets(c, vault.EnsureNoTrailingSlash(newPath), sm, wg)
-				} else {
-					// reconciling v2 secret engine requirement for list operation
-					keyPath := strings.Replace(newPath, "metadata", "data", 1)
-					c.DebugMsg(fmt.Sprintf("processing a secret at %s", keyPath))
-
-					sec, err := c.Client.Logical().Read(keyPath)
-					if err != nil {
-						log.Printf("failed to get secrets from %s, %s\n", keyPath, err.Error())
-					}
-
-					if sec != nil {
-						sm.Store(keyPath, sec.Data)
-					}
-
-				}
-			}
-		}
+	if secret != nil {
+		fmt.Println(keyPath)
+		m[keyPath] = secret.Data
 	}
 }
 
@@ -240,7 +181,7 @@ func GetPathForOutput(path string) string {
 // GetPathFromInput
 func GetPathFromInput(c *vaultapi.Client, input string) string {
 	if input == "" {
-		panic("missing input path from command line")
+		log.Panic("missing input path from command line")
 	}
 	u := updatePathIfKVv2(c, vault.SanitizePath(input))
 
@@ -254,17 +195,16 @@ func ValidateOutputType(outputType string) (string, bool) {
 	default:
 		return "", false
 	}
-
 }
 
 // ProcessOutput takes action based on inputs to complete the
 // desired output result
-func ProcessOutput(c *Config, s *sync.Map) {
+func (c *Config) ProcessOutput(m map[string]interface{}) {
 	switch c.outputType {
 	case "file":
-		writeToFile(s, c.encodingType, c.inputPath, c.outputType)
+		c.writeToFile(m)
 	case "stdout":
-		printToStdOut(s, c.GetOutputEncoding())
+		c.printToStdOut(m)
 	default:
 		log.Panicf("Unexpected output type %s\n", c.outputType)
 	}
@@ -285,19 +225,19 @@ func (c *Config) SetInput(i string) {
 	c.inputPath = GetPathFromInput(c.Client, i)
 }
 
-// SetOutputPath
-func (c *Config) SetOutput(outputPath, encoding, outputType string) {
+// SetOutput validates inputs before setting the Config attr
+func (c *Config) SetOutput(outputPath, outputEncoding, outputType string) {
 	c.outputPath = GetPathForOutput(outputPath)
 
-	et, ok := validateOutputEncoding(encoding)
+	oe, ok := validateOutputEncoding(outputEncoding)
 	if !ok {
-		log.Panicf("Unexpected encoding type %s. \n", encoding)
+		log.Panicf("Unexpected encoding type %s. \n", outputEncoding)
 	}
-	c.encodingType = et
+	c.outputEncoding = oe
 
 	ot, ok := ValidateOutputType(outputType)
 	if !ok {
-		c.DebugMsg(fmt.Sprintf("Unexpected output type %s. ", outputType))
+		log.Panicf("Unexpected output type %s. ", outputType)
 	}
 	c.outputType = ot
 }

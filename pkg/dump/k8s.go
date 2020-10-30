@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +21,7 @@ const (
 )
 
 // ToKube
-func ToKube(c *Config, s *sync.Map) error {
+func ToKube(c *Config, m map[string]interface{}) error {
 	var config *rest.Config
 	var err error
 
@@ -46,18 +45,11 @@ func ToKube(c *Config, s *sync.Map) error {
 	}
 
 	secrets, _ := kClient.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{})
+	log.Printf("There are %d secrets in the cluster\n", len(secrets.Items))
 
-	fmt.Printf("There are %d secrets in the cluster\n", len(secrets.Items))
-
-	m := make(map[interface{}]interface{})
-	s.Range(func(key, val interface{}) bool {
-		m[key] = val
-		return true
-	})
 	c.DebugMsg(fmt.Sprintf("There are %d secrets in the mountpath\n", len(m)))
 	for k, v := range m {
-
-		err := createOrModifySecret(kClient, k.(string), v.(map[string]interface{})) // type assertion syntax
+		err := createOrModifySecret(kClient, k, v.(map[string]interface{})) // type assertion syntax
 		if err != nil {
 			return fmt.Errorf("failed to create or modify secret: %w", err)
 		}
@@ -66,17 +58,11 @@ func ToKube(c *Config, s *sync.Map) error {
 }
 
 func createOrModifySecret(client *kubernetes.Clientset, key string, value map[string]interface{}) error {
-	// fmt.Println(key)
-	// fmt.Println(value["data"])
 	secretMap := make(map[string]string)
-	for k, v := range value["data"].(map[string]interface{}) {
+	for k, v := range value {
 		// convert to map[string]string
 		secretMap[strings.ToUpper(k)] = v.(string)
 	}
-	// fmt.Println(secretMap)
-	// for i, j := range secretMap {
-	// 	fmt.Println(fmt.Sprintf("key: %s, value: %s", i, j))
-	// }
 
 	secretName := strings.Join(strings.Split(key, "/")[1:], ".")
 	kSecret := corev1.Secret{
@@ -94,30 +80,33 @@ func createOrModifySecret(client *kubernetes.Clientset, key string, value map[st
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get secret with name %s: %w", secretName, err)
-	}
-
-	// merge vault secret into kube secret, overriding k8s secrets if force flag is set,
-	// otherwise fail due to existing key values that do not match
-	// vaultSecret := make(map[string][]byte)
-	// for k, v := range value["data"].(map[string]interface{}) {
-	// 	// convert to map[string]string
-	// 	vaultSecret[strings.ToUpper(k)] = (v.([]byte))
-	// }
-	// // if vaultSecret != secretExists.Data {
-
-	// // }
-	for k, v := range secretMap {
-		for i, j := range secretExists.Data {
-			if k != i || string(v) != string(j) {
-				log.Println(k, string(v))
-				log.Println(i, string(j))
-			}
+	} else {
+		// merge vault secret into kube secret, overriding k8s secrets
+		// TODO override if force flag is set, otherwise fail due to existing key values that do not match
+		newMap := make(map[string]string)
+		for k1, v1 := range secretExists.Data {
+			newMap[k1] = string(v1)
 		}
+		for i, j := range secretMap {
+			// TODO log what key when values do not match
+			// log.Printf("secret: %s,\tkey: %s\n", i, j)
+			newMap[i] = j
+		}
+		_, err = client.CoreV1().Secrets("default").Update(
+			context.TODO(),
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: secretName,
+				},
+				StringData: newMap,
+			},
+			metav1.UpdateOptions{},
+		)
+		if err != nil {
+			return fmt.Errorf("failed: %w", err)
+		}
+
 	}
 
-	for k1, _ := range secretExists.Data {
-		log.Printf("secret: %s,\tkey: %s\n", key, k1)
-	}
-	log.Println(value)
 	return nil
 }
