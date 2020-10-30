@@ -50,9 +50,17 @@ func isDir(p string) bool {
 func (c *Config) printToStdOut(m map[string]interface{}) bool {
 	switch c.outputEncoding {
 	case "json":
-		fmt.Println(toJSON(m))
+		j, e := toJSON(m)
+		if e != nil {
+			return false
+		}
+		fmt.Println(j)
 	case "yaml":
-		fmt.Println(toYaml(m))
+		y, e := toYaml(m)
+		if e != nil {
+			return false
+		}
+		fmt.Println(toYaml(y))
 	default:
 		log.Printf("Unexpected input %s. writeToFile only understands json and yaml", c.outputEncoding)
 		return false

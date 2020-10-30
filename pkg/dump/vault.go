@@ -117,6 +117,10 @@ func (s *SecretScraper) ProcessOutput(c *Config) {
 	switch c.outputType {
 	case "file":
 		c.writeToFile(s.Data)
+	case "k8s":
+		if err := ToKube(c, s.Data); err != nil {
+			log.Fatalln(err.Error())
+		}
 	case "stdout":
 		c.printToStdOut(s.Data)
 	default:
