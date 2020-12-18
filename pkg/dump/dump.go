@@ -186,14 +186,9 @@ func getSecret(config *Config, m map[interface{}]interface{}, secretChan chan st
 // GetPathForOutput
 func GetPathForOutput(path string) string {
 	if path == "" {
-		dir, err := os.Getwd()
-		if err != nil {
-			log.Println(err)
-			os.Exit(1)
-		}
-		path = dir
+		path = "/tmp/vault-dump"
 	}
-	return vault.EnsureNoTrailingSlash(path) + "/vault-dump"
+	return vault.EnsureNoTrailingSlash(path)
 }
 
 // GetPathFromInput
