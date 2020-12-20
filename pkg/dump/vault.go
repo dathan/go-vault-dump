@@ -112,9 +112,16 @@ func (s *SecretScraper) getSecretFromLeafStream(ctx context.Context, id int) {
 			s.errorChan <- err
 		}
 
+		// secret engine v2 has a different response body
+		data := vaultSecret.Data["data"]
+		if data == nil {
+			// secret engine v1
+			data = vaultSecret.Data
+		}
+
 		secret := secret{
 			path: path,
-			data: vaultSecret.Data["data"],
+			data: data,
 		}
 		s.secretStream <- secret
 	}
