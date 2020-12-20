@@ -83,11 +83,10 @@ func init() {
 			os.Exit(1)
 		}
 	}
-	fmt.Println("Using config file:", viper.ConfigFileUsed())
+
 	viper.SetEnvPrefix("VAULT_DUMP")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()
-
 }
 
 func main() {
