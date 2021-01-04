@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	vaultapi "github.com/hashicorp/vault/api"
@@ -100,19 +101,26 @@ func updatePathIfKVv2(c *vaultapi.Client, path string) string {
 }
 
 func writeFile(data, path string) bool {
+	dirpath := filepath.Dir(path)
+	if err := os.MkdirAll(dirpath, 0755); err != nil {
+		log.Println(err)
+		return false
+	}
+
 	f, err := os.Create(path)
 	if err != nil {
 		log.Println(err)
 		f.Close()
 		return false
 	}
+	f.Chmod(0600) // only you can access this file
 
 	b, err := f.WriteString(data)
 	if err != nil {
 		log.Println(err)
 		return false
 	}
-	log.Println(string(b) + " bytes written successfully\n")
+	log.Println(fmt.Sprint(b) + " bytes written successfully\n")
 
 	if err = f.Close(); err != nil {
 		log.Printf("failed to close file, %s", err.Error())
@@ -124,9 +132,10 @@ func writeFile(data, path string) bool {
 }
 
 func (c *Config) writeToFile(m map[string]interface{}) bool {
-	inputPath := vault.SanitizePath(strings.Replace(c.inputPath, "metadata", "", 1))
+	inputPath := vault.SanitizePath(strings.Replace(c.inputPath, "/metadata", "", 1))
 	fileName := fmt.Sprintf("%s/%s.%s", c.outputPath, inputPath, c.outputEncoding)
 
+	var err error
 	switch c.outputEncoding {
 	case "json":
 		j, e := toJSON(m)
@@ -142,6 +151,10 @@ func (c *Config) writeToFile(m map[string]interface{}) bool {
 		_ = writeFile(y, fileName)
 	default:
 		log.Printf("Unexpected input %s. writeToFile only understands json and yaml", c.outputEncoding)
+		return false
+	}
+	if err != nil {
+		log.Println(err)
 		return false
 	}
 	return true
@@ -173,7 +186,7 @@ func getSecret(config *Config, m map[interface{}]interface{}, secretChan chan st
 // GetPathForOutput
 func GetPathForOutput(path string) string {
 	if path == "" {
-		path = "/tmp"
+		path = "/tmp/vault-dump"
 	}
 	return vault.EnsureNoTrailingSlash(path)
 }
