@@ -43,18 +43,11 @@ var (
 				return err
 			}
 
-			// go func() {
 			if err := loader.FromFile(args[0]); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			// }()
 
-			// TODO
-			// signalChan := make(chan os.Signal, 1)
-			// signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-			// <-signalChan
-			// loader.Shutdown(context.Background())
 			return nil
 		},
 	}
