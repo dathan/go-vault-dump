@@ -3,6 +3,8 @@ package vault
 import (
 	"errors"
 	"log"
+	"math/rand"
+	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 )
@@ -27,6 +29,15 @@ func NewClient(vc *Config) (*Config, error) {
 	return vc, nil
 }
 
+// updateSecret
+func (vc *Config) updateSecret(path string, secret map[string]interface{}) (bool, error) {
+	// TODO decide if we should be idempotent here
+	if _, err := vc.Client.Logical().Write(path, secret); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // OverwriteSecret
 func (vc *Config) OverwriteSecret(path string, secret map[string]interface{}) error {
 	path = SanitizePath(path)
@@ -36,9 +47,16 @@ func (vc *Config) OverwriteSecret(path string, secret map[string]interface{}) er
 		return err
 	}
 
-	// TODO decide if we should be idempotent here
-	if _, err := vc.Client.Logical().Write(path, secret); err != nil {
-		return err
+	for i := 1; i < 6; i++ {
+		ok, err := vc.updateSecret(path, secret)
+		if ok {
+			break
+		}
+		if i == 5 && err != nil {
+			return err
+		}
+
+		time.Sleep(time.Duration(rand.Int31n(60)) * time.Second)
 	}
 
 	log.Println("wrote secret to:", path)

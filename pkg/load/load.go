@@ -113,7 +113,6 @@ func (c *Config) FromFile(filepath string) error {
 		log.Println(k, v.(int))
 		return true
 	})
-	log.Println()
 	cancelFunc()
 	return nil
 }
