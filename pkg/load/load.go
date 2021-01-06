@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"syscall"
 
@@ -16,7 +17,6 @@ import (
 // Config
 type Config struct {
 	VaultConfig *vault.Config
-	ch          chan os.Signal
 	wg          *sync.WaitGroup
 }
 
@@ -24,38 +24,47 @@ type Config struct {
 func New(c *Config) (*Config, error) {
 	return &Config{
 		VaultConfig: c.VaultConfig,
-		ch:          make(chan os.Signal, 1),
 		wg:          new(sync.WaitGroup),
 	}, nil
 }
 
 // FromFile
 func (c *Config) FromFile(filepath string) error {
-	defer close(c.ch)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	signalChan := make(chan os.Signal, 1)
-	go func() {
+	go func(ctx context.Context) {
 		defer close(signalChan)
+		fmt.Println("Listening for signals")
 		signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-		<-signalChan
-		c.Shutdown(context.Background())
-	}()
+
+		select {
+		case <-ctx.Done():
+			break
+		case s := <-signalChan:
+			if s != nil {
+				fmt.Println("Caught signal:", s)
+			}
+		}
+		cancelFunc()
+	}(ctx)
 
 	secrets, err := readSecretsFromFile(filepath)
 	if err != nil {
+		cancelFunc()
 		return err
 	}
 
 	secretChan := make(chan map[string]interface{})
 	c.wg.Add(1)
-	go func() {
+	go func(ctx context.Context) {
 		defer c.wg.Done()
-		defer close(secretChan)
 
 		for p, s := range secrets {
 			select {
-			case <-c.ch:
-				break
+			case <-ctx.Done():
+				close(secretChan)
+				return
 			default:
 				secretChan <- map[string]interface{}{
 					"k": p,
@@ -64,31 +73,32 @@ func (c *Config) FromFile(filepath string) error {
 			}
 		}
 
-	}()
+		close(secretChan)
+		fmt.Println("Completed map to channel")
+	}(ctx)
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		for s := range secretChan {
-			select {
-			case <-c.ch:
-				break
-			default:
-				if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
-					fmt.Println(err.Error())
+	for i := 0; i != 2*runtime.NumCPU(); i++ {
+		c.wg.Add(1)
+		go func(ctx context.Context) {
+			defer c.wg.Done()
+			for s := range secretChan {
+				select {
+				case <-ctx.Done():
+					fmt.Println("Received signal to stop, stopping OverwriteSecret")
+					return
+				default:
+					if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
+						fmt.Println(err.Error())
+					}
 				}
-			}
 
-		}
-	}()
+			}
+		}(ctx)
+	}
 
 	c.wg.Wait()
+	cancelFunc()
 	return nil
-}
-
-// Shutdown
-func (c *Config) Shutdown(ctx context.Context) {
-	c.ch <- syscall.SIGTERM // or do I just close(c.ch)
 }
 
 // readSecretsFromFile returns a map from the given json file
