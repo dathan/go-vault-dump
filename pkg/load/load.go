@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/dathan/go-vault-dump/pkg/vault"
+	"golang.org/x/sync/syncmap"
 )
 
 // Config
@@ -77,6 +79,7 @@ func (c *Config) FromFile(filepath string) error {
 		log.Println("Completed map to channel")
 	}(ctx)
 
+	errCount := new(syncmap.Map)
 	for i := 0; i != 2*runtime.NumCPU(); i++ {
 		c.wg.Add(1)
 		go func(ctx context.Context) {
@@ -88,6 +91,15 @@ func (c *Config) FromFile(filepath string) error {
 					return
 				default:
 					if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
+						errSlice := strings.Split(err.Error(), ":")
+						errID := strings.TrimSpace(errSlice[len(errSlice)-1])
+						count, ok := errCount.LoadOrStore(errID, 1)
+						if ok {
+							ec := count.(int) // cast interface to integer
+							ec++              // increment
+							errCount.Store(errID, ec)
+						}
+
 						log.Println(err.Error())
 					}
 				}
@@ -97,6 +109,11 @@ func (c *Config) FromFile(filepath string) error {
 	}
 
 	c.wg.Wait()
+	errCount.Range(func(k, v interface{}) bool {
+		log.Println(k, v.(int))
+		return true
+	})
+	log.Println()
 	cancelFunc()
 	return nil
 }
