@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -23,6 +24,25 @@ var (
 		Use:   "vault-import",
 		Short: "import secrets to Vault",
 		Long:  `Imports multiple secrets from a file created by vault-dump`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			logSetup() // behavior suggests that RunE inherits scope from Args
+			// validate input
+			if len(args) < 1 {
+				return errors.New("Not enough arguments passed, please provide path to the file")
+			}
+			if _, err := os.Stat(args[0]); err != nil {
+				return err
+			}
+
+			if viper.GetString(vaFlag) == "" {
+				return errors.New(vaFlag + " must be set")
+			}
+			if viper.GetString(vtFlag) == "" {
+				return errors.New(vtFlag + " must be set")
+			}
+
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			vc, err := vault.NewClient(&vault.Config{
 				Address: viper.GetString(vaFlag),
@@ -42,7 +62,7 @@ var (
 			}
 
 			if err := loader.FromFile(args[0]); err != nil {
-				exitErr(err)
+				return err
 			}
 
 			return nil
@@ -53,31 +73,26 @@ var (
 )
 
 func exitErr(e error) {
-	fmt.Fprintln(os.Stderr, e)
+	log.SetOutput(os.Stderr)
+	log.Println(e)
 	os.Exit(1)
 }
 
-func init() {
-	l := len(os.Args)
-	switch {
-	case l < 2:
-		exitErr(errors.New("Not enough arguments passed, please provide path to the file"))
-	case l == 2:
-		if _, err := os.Stat(os.Args[1]); err != nil {
-			exitErr(err)
-		}
-	default:
-		fmt.Fprintln(os.Stderr, errors.New("Too many arguments passed, using the first"))
+func logSetup() {
+	log.SetFlags(0)
+	if Verbose {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
 	}
+}
 
+func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
-
-	// pflag.CommandLine.ParseErrorsWhitelist.UnknownFlags = true
+	rootCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
 }
 
 func initConfig() {
@@ -97,7 +112,6 @@ func initConfig() {
 			exitErr(fmt.Errorf("fatal error config file: %v", err))
 		}
 	}
-
 	viper.SetEnvPrefix("VAULT_IMPORT")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()

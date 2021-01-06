@@ -2,7 +2,7 @@ package vault
 
 import (
 	"errors"
-	"fmt"
+	"log"
 
 	vaultapi "github.com/hashicorp/vault/api"
 )
@@ -41,6 +41,6 @@ func (vc *Config) OverwriteSecret(path string, secret map[string]interface{}) er
 		return err
 	}
 
-	fmt.Println("wrote secret to:", path)
+	log.Println("wrote secret to:", path)
 	return nil
 }

@@ -3,8 +3,8 @@ package load
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
 	"runtime"
@@ -35,7 +35,7 @@ func (c *Config) FromFile(filepath string) error {
 	signalChan := make(chan os.Signal, 1)
 	go func(ctx context.Context) {
 		defer close(signalChan)
-		fmt.Println("Listening for signals")
+		log.Println("Listening for signals")
 		signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 		select {
@@ -43,7 +43,7 @@ func (c *Config) FromFile(filepath string) error {
 			break
 		case s := <-signalChan:
 			if s != nil {
-				fmt.Println("Caught signal:", s)
+				log.Println("Caught signal:", s)
 			}
 		}
 		cancelFunc()
@@ -74,7 +74,7 @@ func (c *Config) FromFile(filepath string) error {
 		}
 
 		close(secretChan)
-		fmt.Println("Completed map to channel")
+		log.Println("Completed map to channel")
 	}(ctx)
 
 	for i := 0; i != 2*runtime.NumCPU(); i++ {
@@ -84,11 +84,11 @@ func (c *Config) FromFile(filepath string) error {
 			for s := range secretChan {
 				select {
 				case <-ctx.Done():
-					fmt.Println("Received signal to stop, stopping OverwriteSecret")
+					log.Println("Received signal to stop, stopping OverwriteSecret")
 					return
 				default:
 					if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
-						fmt.Println(err.Error())
+						log.Println(err.Error())
 					}
 				}
 
