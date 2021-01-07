@@ -2,7 +2,9 @@ package load
 
 import (
 	"context"
+	"crypto/sha1"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -91,9 +93,18 @@ func writeFailedToFile(sm *sync.Map) error {
 	if err != nil {
 		return err
 	}
-	// TODO keep from clobbering this if it is used as input
-	filename := cwd + "/failed-secrets.json"
-	file.WriteToFile(filename, failed)
+
+	jsonData, err := json.Marshal(failed)
+	if err != nil {
+		return err
+	}
+
+	data := string(jsonData)
+	filename := fmt.Sprintf("%x", sha1.Sum([]byte(data)))
+	if ok := file.WriteFile(fmt.Sprintf("%v/%v.json", cwd, filename), data); !ok {
+		return fmt.Errorf("failed to write file %v", filename)
+	}
+
 	return nil
 }
 

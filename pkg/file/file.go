@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-func writeFile(path, data string) bool {
+func WriteFile(path, data string) bool {
 	dirpath := filepath.Dir(path)
 	if err := os.MkdirAll(dirpath, 0755); err != nil {
 		log.Println(err)
@@ -44,7 +44,7 @@ func WriteToFile(filename string, data map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	if ok := writeFile(filename, string(jsonData)); !ok {
+	if ok := WriteFile(filename, string(jsonData)); !ok {
 		return fmt.Errorf("failed to write file %v", filename)
 	}
 	return nil
