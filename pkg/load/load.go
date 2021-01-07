@@ -46,25 +46,7 @@ func (c *Config) FromFile(filepath string) error {
 
 	secretChan := make(chan map[string]interface{})
 	c.wg.Add(1)
-	go func(ctx context.Context) {
-		defer c.wg.Done()
-
-		for p, s := range secrets {
-			select {
-			case <-ctx.Done():
-				close(secretChan)
-				return
-			default:
-				secretChan <- map[string]interface{}{
-					"k": p,
-					"v": s,
-				}
-			}
-		}
-
-		close(secretChan)
-		log.Println("Completed map to channel")
-	}(ctx)
+	go c.secretProducer(ctx, secrets, secretChan)
 
 	errCount := new(syncmap.Map)
 	errMap := new(syncmap.Map)
@@ -159,4 +141,24 @@ func signalHandler(ctx context.Context, cancelFunc context.CancelFunc, signalCha
 		}
 	}
 	cancelFunc()
+}
+
+func (c *Config) secretProducer(ctx context.Context, secrets map[string]interface{}, secretChan chan map[string]interface{}) {
+	defer c.wg.Done()
+
+	for p, s := range secrets {
+		select {
+		case <-ctx.Done():
+			close(secretChan)
+			return
+		default:
+			secretChan <- map[string]interface{}{
+				"k": p,
+				"v": s,
+			}
+		}
+	}
+
+	close(secretChan)
+	log.Println("Completed map to channel")
 }
