@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/dathan/go-vault-dump/pkg/file"
 	"github.com/dathan/go-vault-dump/pkg/vault"
 	"golang.org/x/sync/syncmap"
 )
@@ -80,6 +81,7 @@ func (c *Config) FromFile(filepath string) error {
 	}(ctx)
 
 	errCount := new(syncmap.Map)
+	errMap := new(syncmap.Map)
 	for i := 0; i != 2*runtime.NumCPU(); i++ {
 		c.wg.Add(1)
 		go func(ctx context.Context) {
@@ -101,6 +103,7 @@ func (c *Config) FromFile(filepath string) error {
 						}
 
 						log.Println(err.Error())
+						errMap.Store(s["k"].(string), s["v"].(map[string]interface{}))
 					}
 				}
 
@@ -109,11 +112,36 @@ func (c *Config) FromFile(filepath string) error {
 	}
 
 	c.wg.Wait()
+
 	errCount.Range(func(k, v interface{}) bool {
 		log.Println(k, v.(int))
 		return true
 	})
+	if err := writeFailedToFile(errMap); err != nil {
+		return err
+	}
+
 	cancelFunc()
+	return nil
+}
+
+func writeFailedToFile(sm *sync.Map) error {
+	failed := make(map[string]interface{})
+	sm.Range(func(k, v interface{}) bool {
+		failed[k.(string)] = v
+		return true
+	})
+	if len(failed) == 0 {
+		return nil
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	// TODO keep from clobbering this if it is used as input
+	filename := cwd + "/failed-secrets.json"
+	file.WriteToFile(filename, failed)
 	return nil
 }
 
