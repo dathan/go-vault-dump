@@ -4,9 +4,11 @@ import (
 	"errors"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
+	"golang.org/x/sync/syncmap"
 )
 
 // Config
@@ -15,6 +17,7 @@ type Config struct {
 	Token   string
 	Client  *vaultapi.Client
 	Retries int
+	memo    *sync.Map
 }
 
 // NewClient
@@ -26,6 +29,7 @@ func NewClient(vc *Config) (*Config, error) {
 	vaultClient.SetAddress(vc.Address)
 	vaultClient.SetToken(vc.Token)
 	vc.Client = vaultClient
+	vc.memo = new(syncmap.Map)
 
 	return vc, nil
 }
@@ -48,7 +52,7 @@ func (vc *Config) OverwriteSecret(path string, secret map[string]interface{}) er
 	retries := 0
 	ok := false
 	for !ok {
-		path, secret, err = updateIfKVv2(vc.Client, path, secret)
+		path, secret, err = vc.updateIfKVv2(path, secret)
 		if err == nil {
 			ok = true
 			continue
