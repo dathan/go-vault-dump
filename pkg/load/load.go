@@ -21,6 +21,12 @@ import (
 type Config struct {
 	VaultConfig *vault.Config
 	wg          *sync.WaitGroup
+	errInfo     *errInfo
+}
+
+type errInfo struct {
+	count *sync.Map
+	data  *sync.Map
 }
 
 // New
@@ -28,6 +34,10 @@ func New(c *Config) (*Config, error) {
 	return &Config{
 		VaultConfig: c.VaultConfig,
 		wg:          new(sync.WaitGroup),
+		errInfo: &errInfo{
+			count: new(syncmap.Map),
+			data:  new(syncmap.Map),
+		},
 	}, nil
 }
 
@@ -48,44 +58,18 @@ func (c *Config) FromFile(filepath string) error {
 	c.wg.Add(1)
 	go c.secretProducer(ctx, secrets, secretChan)
 
-	errCount := new(syncmap.Map)
-	errMap := new(syncmap.Map)
 	for i := 0; i != 2*runtime.NumCPU(); i++ {
 		c.wg.Add(1)
-		go func(ctx context.Context) {
-			defer c.wg.Done()
-			for s := range secretChan {
-				select {
-				case <-ctx.Done():
-					log.Println("Received signal to stop, stopping OverwriteSecret")
-					return
-				default:
-					if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
-						errSlice := strings.Split(err.Error(), ":")
-						errID := strings.TrimSpace(errSlice[len(errSlice)-1])
-						count, ok := errCount.LoadOrStore(errID, 1)
-						if ok {
-							ec := count.(int) // cast interface to integer
-							ec++              // increment
-							errCount.Store(errID, ec)
-						}
-
-						log.Println(err.Error())
-						errMap.Store(s["k"].(string), s["v"].(map[string]interface{}))
-					}
-				}
-
-			}
-		}(ctx)
+		go c.secretConsumer(ctx, secretChan)
 	}
 
 	c.wg.Wait()
 
-	errCount.Range(func(k, v interface{}) bool {
+	c.errInfo.count.Range(func(k, v interface{}) bool {
 		log.Println(k, v.(int))
 		return true
 	})
-	if err := writeFailedToFile(errMap); err != nil {
+	if err := writeFailedToFile(c.errInfo.data); err != nil {
 		return err
 	}
 
@@ -161,4 +145,29 @@ func (c *Config) secretProducer(ctx context.Context, secrets map[string]interfac
 
 	close(secretChan)
 	log.Println("Completed map to channel")
+}
+
+func (c *Config) secretConsumer(ctx context.Context, secretChan chan map[string]interface{}) {
+	defer c.wg.Done()
+	for s := range secretChan {
+		select {
+		case <-ctx.Done():
+			log.Println("Received signal to stop, stopping OverwriteSecret")
+			return
+		default:
+			if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
+				errSlice := strings.Split(err.Error(), ":")
+				errID := strings.TrimSpace(errSlice[len(errSlice)-1])
+				count, ok := c.errInfo.count.LoadOrStore(errID, 1)
+				if ok {
+					ec := count.(int) // cast interface to integer
+					ec++              // increment
+					c.errInfo.count.Store(errID, ec)
+				}
+
+				log.Println(err.Error())
+				c.errInfo.data.Store(s["k"].(string), s["v"].(map[string]interface{}))
+			}
+		}
+	}
 }
