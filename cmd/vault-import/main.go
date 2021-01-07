@@ -44,8 +44,13 @@ var (
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			retries := 5
+			if Brute {
+				retries = 0
+			}
 			vc, err := vault.NewClient(&vault.Config{
 				Address: viper.GetString(vaFlag),
+				Retries: retries,
 				Token:   viper.GetString(vtFlag),
 			})
 			if err != nil {
@@ -68,6 +73,8 @@ var (
 			return nil
 		},
 	}
+	// Brute global var
+	Brute bool
 	// Verbose global var
 	Verbose bool
 )
@@ -92,6 +99,7 @@ func init() {
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&Brute, "brute", "", false, "retry failed indefinitely")
 	rootCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
 }
 

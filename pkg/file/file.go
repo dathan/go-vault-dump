@@ -28,7 +28,7 @@ func writeFile(path, data string) bool {
 		log.Println(err)
 		return false
 	}
-	log.Println(fmt.Sprint(b) + " bytes written successfully\n")
+	log.Println(fmt.Sprint(b) + " bytes written successfully")
 
 	if err = f.Close(); err != nil {
 		log.Printf("failed to close file, %s", err.Error())

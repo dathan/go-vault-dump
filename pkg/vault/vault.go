@@ -14,6 +14,7 @@ type Config struct {
 	Address string
 	Token   string
 	Client  *vaultapi.Client
+	Retries int
 }
 
 // NewClient
@@ -40,25 +41,56 @@ func (vc *Config) updateSecret(path string, secret map[string]interface{}) (bool
 
 // OverwriteSecret
 func (vc *Config) OverwriteSecret(path string, secret map[string]interface{}) error {
+	rand.Seed(time.Now().UTC().UnixNano())
 	path = SanitizePath(path)
 
-	path, secret, err := updateIfKVv2(vc.Client, path, secret)
-	if err != nil {
-		return err
-	}
-
-	for i := 1; i < 6; i++ {
-		ok, err := vc.updateSecret(path, secret)
-		if ok {
-			break
+	var err error // required for scope of other vars
+	retries := 0
+	ok := false
+	for !ok {
+		path, secret, err = updateIfKVv2(vc.Client, path, secret)
+		if err == nil {
+			ok = true
+			continue
 		}
-		if i == 5 && err != nil {
+		if retries > 0 {
+			log.Printf("failed, try number %v with error %v\n", retries+1, err.Error())
+		}
+		time.Sleep(time.Duration(rand.Int31n(1000)) * time.Millisecond)
+		retries++
+		if vc.Retries == 0 {
+			continue
+		}
+		if retries > vc.Retries {
 			return err
 		}
-
-		time.Sleep(time.Duration(rand.Int31n(60)) * time.Second)
 	}
 
-	log.Println("wrote secret to:", path)
+	retries = 0 // reset value
+	ok = false  // reset value
+	for !ok {
+		ok, err = vc.updateSecret(path, secret)
+		if err == nil {
+			if retries > 1 {
+				log.Printf("success, try number %v for %v\n", retries, path)
+			}
+			continue
+		} else {
+			if retries > 0 {
+				log.Printf("failed, try number %v with error %v\n", retries+1, err.Error())
+			}
+		}
+
+		time.Sleep(time.Duration(rand.Int31n(1000)) * time.Millisecond)
+		retries++
+		if vc.Retries == 0 {
+			continue
+		}
+		if retries > vc.Retries {
+			return err
+		}
+	}
+
+	// log.Println("wrote secret to:", path)
 	return nil
 }
