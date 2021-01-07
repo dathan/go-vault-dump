@@ -36,21 +36,7 @@ func (c *Config) FromFile(filepath string) error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	signalChan := make(chan os.Signal, 1)
-	go func(ctx context.Context) {
-		defer close(signalChan)
-		log.Println("Listening for signals")
-		signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-
-		select {
-		case <-ctx.Done():
-			break
-		case s := <-signalChan:
-			if s != nil {
-				log.Println("Caught signal:", s)
-			}
-		}
-		cancelFunc()
-	}(ctx)
+	go signalHandler(ctx, cancelFunc, signalChan)
 
 	secrets, err := readSecretsFromFile(filepath)
 	if err != nil {
@@ -158,4 +144,19 @@ func readSecretsFromFile(filepath string) (map[string]interface{}, error) {
 	}
 
 	return d, nil
+}
+
+func signalHandler(ctx context.Context, cancelFunc context.CancelFunc, signalChan chan os.Signal) {
+	defer close(signalChan)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case <-ctx.Done():
+		break
+	case s := <-signalChan:
+		if s != nil {
+			log.Println("Caught signal:", s)
+		}
+	}
+	cancelFunc()
 }
