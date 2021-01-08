@@ -47,7 +47,7 @@ func ToKube(c *Config, m map[string]interface{}) error {
 	secrets, _ := kClient.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{})
 	log.Printf("There are %d secrets in the cluster\n", len(secrets.Items))
 
-	c.DebugMsg(fmt.Sprintf("There are %d secrets in the mountpath\n", len(m)))
+	// c.DebugMsg(fmt.Sprintf("There are %d secrets in the mountpath\n", len(m)))
 	for k, v := range m {
 		err := createOrModifySecret(kClient, k, v.(map[string]interface{})) // type assertion syntax
 		if err != nil {

@@ -5,93 +5,132 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/dathan/go-vault-dump/pkg/dump"
-	vaultapi "github.com/hashicorp/vault/api"
+	"github.com/dathan/go-vault-dump/pkg/vault"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 const (
-	debugFlag = "debug"
-	vaFlag    = "vault-addr"
-	vtFlag    = "vault-token"
+	vaFlag = "vault-addr"
+	vtFlag = "vault-token"
 )
 
 var (
-	cfgFile string
+	cfgFile    string
+	encoding   string
+	kubeconfig string
+	output     string
 
 	rootCmd = &cobra.Command{
 		Use:   "vault-dump",
 		Short: "dump secrets from Vault",
 		Long:  ``,
+		Args: func(cmd *cobra.Command, args []string) error {
+			logSetup()
+			if len(args) < 1 {
+				return errors.New("Not enough arguments passed, please provide Vault path")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			log.SetFlags(log.LstdFlags | log.Lshortfile)
-			vaultClient, err := vaultapi.NewClient(vaultapi.DefaultConfig())
+			v, err := vault.NewClient(&vault.Config{
+				Address: viper.GetString(vaFlag),
+				Retries: 5,
+				Token:   viper.GetString(vtFlag),
+			})
 			if err != nil {
-				return errors.New("failed vault client init: " + err.Error())
+				return err
 			}
-			vaultClient.SetAddress(viper.GetString(vaFlag))
-			vaultClient.SetToken(viper.GetString(vtFlag))
 
-			config := &dump.Config{
-				Debug:  viper.GetBool(debugFlag),
-				Client: vaultClient,
+			outputPath := ""
+			if len(args) > 1 {
+				outputPath = args[1]
 			}
-			config.SetInput(pflag.Arg(0))
-			config.SetOutput(pflag.Arg(1), viper.GetString("enc"), viper.GetString("o"))
 
-			ss := dump.SecretScraper{}
-			secretScraper := ss.New(vaultClient)
-
-			path := config.GetInput()
-			secretScraper.Start(runtime.GOMAXPROCS(0), path)
-
-			if len(secretScraper.Data) == 0 {
-				log.Println("No secrets found")
-				return nil
+			output, err := dump.NewOutput(
+				outputPath,
+				encoding,
+				output,
+			)
+			if err != nil {
+				return err
 			}
-			secretScraper.ProcessOutput(config)
+
+			dumper, err := dump.New(&dump.Config{
+				Debug:     Verbose,
+				Client:    v.Client,
+				InputPath: args[0],
+				Output:    output,
+			})
+			if err != nil {
+				return err
+			}
+
+			if err := dumper.Secrets(); err != nil {
+				return err
+			}
 
 			return nil
 		},
 	}
 )
 
+var (
+	// Verbose
+	Verbose bool
+)
+
+func exitErr(e error) {
+	log.SetOutput(os.Stderr)
+	log.Println(e)
+	os.Exit(1)
+}
+
 func init() {
-	pflag.String(vaFlag, "https://127.0.0.1:8200", "vault url")
-	pflag.String(vtFlag, "", "vault token")
-	pflag.String("enc", "yaml", "encoding type [json, yaml]")
-	pflag.String("o", "stdout", "output type, [stdout, file]")
-	pflag.String("kc", "", "location of kube config file")
-	pflag.Bool(debugFlag, false, "enables verbose messages")
-	pflag.CommandLine.ParseErrorsWhitelist.UnknownFlags = true
-	pflag.Parse()
-	viper.BindPFlags(pflag.CommandLine)
-	viper.SetConfigName("config")                // name of config file (without extension)
-	viper.SetConfigType("yaml")                  // REQUIRED if the config file does not have the extension in the name
-	viper.AddConfigPath("/etc/vault-dump/")      // path to look for the config file in
-	viper.AddConfigPath("$HOME/.vault-dump")     // call multiple times to add many search paths
-	viper.AddConfigPath(".")                     // optionally look for config in the working directory
+	cobra.OnInitialize(initConfig)
+
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
+	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
+	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
+	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "stdout", "output type, [stdout, file]")
+	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
+	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+}
+
+func initConfig() {
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile) // Use config file from the flag.
+	} else {
+		viper.SetConfigName("config")            // name of config file (without extension)
+		viper.SetConfigType("yaml")              // REQUIRED if the config file does not have the extension in the name
+		viper.AddConfigPath("/etc/vault-dump/")  // path to look for the config file in
+		viper.AddConfigPath("$HOME/.vault-dump") // call multiple times to add many search paths
+	}
+
 	if err := viper.ReadInConfig(); err != nil { // Handle errors reading the config file
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			// Config file was found but another error was produced
-			fmt.Fprintln(os.Stderr, fmt.Errorf("fatal error config file: %v", err))
-			os.Exit(1)
+			exitErr(fmt.Errorf("fatal error config file: %v", err))
 		}
 	}
-
 	viper.SetEnvPrefix("VAULT_DUMP")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()
 }
 
+func logSetup() {
+	log.SetFlags(0)
+	if Verbose {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	}
+}
+
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exitErr(err)
 	}
 }

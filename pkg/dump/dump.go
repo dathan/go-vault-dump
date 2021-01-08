@@ -8,37 +8,55 @@ package dump
 import (
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
+	"runtime"
 
+	"github.com/dathan/go-vault-dump/pkg/file"
+	"github.com/dathan/go-vault-dump/pkg/print"
 	vaultapi "github.com/hashicorp/vault/api"
-
-	"github.com/dathan/go-vault-dump/pkg/vault"
-	alsoyaml "github.com/ghodss/yaml"
-	"gopkg.in/yaml.v2"
 )
 
 // Config
 type Config struct {
-	Debug          bool
-	Client         *vaultapi.Client
-	inputPath      string
-	outputPath     string
-	outputEncoding string
-	outputType     string
+	Debug     bool
+	Client    *vaultapi.Client
+	InputPath string
+	Output    *output
 }
 
-func validateOutputEncoding(encodingType string) (string, bool) {
-	switch encodingType {
-	case "yaml":
-		return "yaml", true
-	case "json":
-		return "json", true
-	default:
-		return "", false
-	}
+func New(c *Config) (*Config, error) {
+	return &Config{
+		Debug:     c.Debug,
+		Client:    c.Client,
+		InputPath: c.InputPath,
+		Output:    c.Output,
+	}, nil
 }
+
+func (c *Config) Secrets() error {
+	secretScraper, err := NewSecretScraper(c.Client)
+	if err != nil {
+		return err
+	}
+
+	secretScraper.Run(c.InputPath, runtime.NumCPU())
+
+	if len(secretScraper.Data) == 0 {
+		log.Println("No secrets found")
+		return nil
+	}
+	log.Println(len(secretScraper.Data))
+	// secretScraper.ProcessOutput()
+	return nil
+}
+
+// func validateOutputEncoding(encodingType string) (string, bool) {
+// 	switch encodingType {
+// 	case "yaml":
+// 	case "json":
+// 		return encodingType, true
+// 	}
+// 	return "", false
+// }
 
 func isDir(p string) bool {
 	lastChar := p[len(p)-1:]
@@ -48,209 +66,165 @@ func isDir(p string) bool {
 	return true
 }
 
-func (c *Config) printToStdOut(m map[string]interface{}) bool {
-	switch c.outputEncoding {
-	case "json":
-		j, e := toJSON(m)
-		if e != nil {
-			return false
-		}
-		fmt.Println(j)
+// func updatePathIfKVv2(c *vaultapi.Client, path string) string {
+// 	mountPath, v2, err := vault.IsKVv2(path, c)
+// 	if err != nil {
+// 		log.Panicln(err, "error determining KV engine version")
+// 	}
+
+// 	if v2 {
+// 		path = vault.AddPrefixToVKVPath(path, mountPath, "metadata")
+// 	}
+// 	return path
+// }
+
+// func writeFile(data, path string) bool {
+// 	dirpath := filepath.Dir(path)
+// 	if err := os.MkdirAll(dirpath, 0755); err != nil {
+// 		log.Println(err)
+// 		return false
+// 	}
+
+// 	f, err := os.Create(path)
+// 	if err != nil {
+// 		log.Println(err)
+// 		f.Close()
+// 		return false
+// 	}
+// 	f.Chmod(0600) // only you can access this file
+
+// 	b, err := f.WriteString(data)
+// 	if err != nil {
+// 		log.Println(err)
+// 		return false
+// 	}
+// 	log.Println(fmt.Sprint(b) + " bytes written successfully\n")
+
+// 	if err = f.Close(); err != nil {
+// 		log.Printf("failed to close file, %s", err.Error())
+// 		return false
+// 	}
+
+// 	log.Println("file written successfully to " + path)
+// 	return true
+// }
+
+func (c *Config) writeToFile(data map[string]interface{}) error {
+	// inputPath := vault.SanitizePath(strings.Replace(c.inputPath, "/metadata", "", 1))
+	var (
+		output string
+		err    error
+	)
+
+	switch c.Output.GetEncoding() {
 	case "yaml":
-		y, e := toYaml(m)
-		if e != nil {
-			return false
+		output, err = print.ToYaml(data)
+		if err != nil {
+			return err
 		}
-		fmt.Println(toYaml(y))
 	default:
-		log.Printf("Unexpected input %s. writeToFile only understands json and yaml", c.outputEncoding)
-		return false
-	}
-	return true
-}
-
-func toJSON(i interface{}) (string, error) {
-	y, err := yaml.Marshal(i)
-	j, err := alsoyaml.YAMLToJSON(y)
-	if err != nil {
-		return "", fmt.Errorf("error when marshalling interface into []byte: %w", err)
-	}
-
-	return string(j), nil
-}
-
-func toYaml(i interface{}) (string, error) {
-	y, err := yaml.Marshal(i)
-	if err != nil {
-		return "", fmt.Errorf("error when marshalling interface into []byte: %w", err)
-	}
-
-	return string(y), nil
-}
-
-func updatePathIfKVv2(c *vaultapi.Client, path string) string {
-	mountPath, v2, err := vault.IsKVv2(path, c)
-	if err != nil {
-		log.Panicln(err, "error determining KV engine version")
-	}
-
-	if v2 {
-		path = vault.AddPrefixToVKVPath(path, mountPath, "metadata")
-	}
-	return path
-}
-
-func writeFile(data, path string) bool {
-	dirpath := filepath.Dir(path)
-	if err := os.MkdirAll(dirpath, 0755); err != nil {
-		log.Println(err)
-		return false
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		log.Println(err)
-		f.Close()
-		return false
-	}
-	f.Chmod(0600) // only you can access this file
-
-	b, err := f.WriteString(data)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	log.Println(fmt.Sprint(b) + " bytes written successfully\n")
-
-	if err = f.Close(); err != nil {
-		log.Printf("failed to close file, %s", err.Error())
-		return false
-	}
-
-	log.Println("file written successfully to " + path)
-	return true
-}
-
-func (c *Config) writeToFile(m map[string]interface{}) bool {
-	inputPath := vault.SanitizePath(strings.Replace(c.inputPath, "/metadata", "", 1))
-	fileName := fmt.Sprintf("%s/%s.%s", c.outputPath, inputPath, c.outputEncoding)
-
-	var err error
-	switch c.outputEncoding {
-	case "json":
-		j, e := toJSON(m)
-		if e != nil {
-			return false
+		output, err = print.ToJSON(data)
+		if err != nil {
+			return err
 		}
-		_ = writeFile(j, fileName)
-	case "yaml":
-		y, e := toYaml(m)
-		if e != nil {
-			return false
-		}
-		_ = writeFile(y, fileName)
-	default:
-		log.Printf("Unexpected input %s. writeToFile only understands json and yaml", c.outputEncoding)
-		return false
-	}
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	return true
-}
-
-// DebugMsg is a helper function that prints the message
-// if the debug flag is set
-func (c *Config) DebugMsg(msg string) {
-	if c.Debug {
-		log.Println(msg)
-	}
-}
-
-func getSecret(config *Config, m map[interface{}]interface{}, secretChan chan string, errorChan chan error) {
-	keyPath := <-secretChan
-	secret, err := config.Client.Logical().Read(keyPath)
-	if err != nil {
-		log.Printf("failed to get secrets from %s, %s\n", keyPath, err.Error())
-		errorChan <- err
-		return
 	}
 
-	if secret != nil {
-		fmt.Println(keyPath)
-		m[keyPath] = secret.Data
+	filename := fmt.Sprintf("%s/%s.%s", c.Output.GetPath(), c.InputPath, c.Output.GetEncoding())
+	if ok := file.WriteFile(filename, output); !ok {
+		return fmt.Errorf("failed to write %v", filename)
 	}
+
+	return nil
 }
 
-// GetPathForOutput
-func GetPathForOutput(path string) string {
-	if path == "" {
-		path = "/tmp/vault-dump"
-	}
-	return vault.EnsureNoTrailingSlash(path)
-}
+// // DebugMsg is a helper function that prints the message
+// // if the debug flag is set
+// func (c *Config) DebugMsg(msg string) {
+// 	if c.Debug {
+// 		log.Println(msg)
+// 	}
+// }
 
-// GetPathFromInput
-func GetPathFromInput(c *vaultapi.Client, input string) string {
-	if input == "" {
-		log.Panic("missing input path from command line")
-	}
-	u := updatePathIfKVv2(c, vault.SanitizePath(input))
+// func getSecret(config *Config, m map[interface{}]interface{}, secretChan chan string, errorChan chan error) {
+// 	keyPath := <-secretChan
+// 	secret, err := config.Client.Logical().Read(keyPath)
+// 	if err != nil {
+// 		log.Printf("failed to get secrets from %s, %s\n", keyPath, err.Error())
+// 		errorChan <- err
+// 		return
+// 	}
 
-	return vault.EnsureNoTrailingSlash(u)
-}
+// 	if secret != nil {
+// 		fmt.Println(keyPath)
+// 		m[keyPath] = secret.Data
+// 	}
+// }
 
-func ValidateOutputType(outputType string) (string, bool) {
-	switch outputType {
-	case "file", "stdout", "k8s":
-		return outputType, true
-	default:
-		return "", false
-	}
-}
+// // GetPathForOutput
+// func GetPathForOutput(path string) string {
+// 	if path == "" {
+// 		path = "/tmp/vault-dump"
+// 	}
+// 	return vault.EnsureNoTrailingSlash(path)
+// }
 
-// ProcessOutput takes action based on inputs to complete the
-// desired output result
-func (c *Config) ProcessOutput(m map[string]interface{}) {
-	switch c.outputType {
-	case "file":
-		c.writeToFile(m)
-	case "stdout":
-		c.printToStdOut(m)
-	default:
-		log.Panicf("Unexpected output type %s\n", c.outputType)
-	}
-}
+// // GetPathFromInput
+// func GetPathFromInput(c *vaultapi.Client, input string) string {
+// 	if input == "" {
+// 		log.Panic("missing input path from command line")
+// 	}
+// 	u := updatePathIfKVv2(c, vault.SanitizePath(input))
 
-// GetInputPath
-func (c *Config) GetInput() string {
-	return c.inputPath
-}
+// 	return vault.EnsureNoTrailingSlash(u)
+// }
 
-// GetOutputPath
-func (c *Config) GetOutput() string {
-	return c.outputPath
-}
+// func ValidateOutputType(outputType string) (string, bool) {
+// 	switch outputType {
+// 	case "file", "stdout", "k8s":
+// 		return outputType, true
+// 	default:
+// 		return "", false
+// 	}
+// }
 
-// SetInputPath
-func (c *Config) SetInput(i string) {
-	c.inputPath = GetPathFromInput(c.Client, i)
-}
+// // ProcessOutput takes action based on inputs to complete the
+// // desired output result
+// func (c *Config) ProcessOutput(m map[string]interface{}) error {
+// 	switch c.Output.GetKind() {
+// 	case "stdout":
+// 		print.Stdout(m, c.Output.GetEncoding())
+// 	default:
+// 		if err := c.writeToFile(m); err != nil {
+// 			return err
+// 		}
+
+// 	}
+// 	return nil
+// }
+
+// // GetInputPath
+// func (c *Config) GetInput() string {
+// 	return c.inputPath
+// }
+
+// // SetInputPath
+// func (c *Config) SetInput(i string) {
+// 	c.inputPath = GetPathFromInput(c.Client, i)
+// }
 
 // SetOutput validates inputs before setting the Config attr
-func (c *Config) SetOutput(outputPath, outputEncoding, outputType string) {
-	c.outputPath = GetPathForOutput(outputPath)
+// func (c *Config) SetOutput(outputPath, outputEncoding, outputType string) {
+// 	c.outputPath = GetPathForOutput(outputPath)
 
-	oe, ok := validateOutputEncoding(outputEncoding)
-	if !ok {
-		log.Panicf("Unexpected encoding type %s. \n", outputEncoding)
-	}
-	c.outputEncoding = oe
+// 	oe, ok := validateOutputEncoding(outputEncoding)
+// 	if !ok {
+// 		log.Panicf("Unexpected encoding type %s. \n", outputEncoding)
+// 	}
+// 	c.outputEncoding = oe
 
-	ot, ok := ValidateOutputType(outputType)
-	if !ok {
-		log.Panicf("Unexpected output type %s. ", outputType)
-	}
-	c.outputType = ot
-}
+// 	ot, ok := ValidateOutputType(outputType)
+// 	if !ok {
+// 		log.Panicf("Unexpected output type %s. ", outputType)
+// 	}
+// 	c.outputType = ot
+// }
