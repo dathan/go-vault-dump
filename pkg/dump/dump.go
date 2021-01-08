@@ -44,8 +44,11 @@ func (c *Config) Secrets() error {
 		log.Println("No secrets found")
 		return nil
 	}
-	log.Println(len(secretScraper.Data))
-	// secretScraper.ProcessOutput()
+
+	if err := c.ProcessOutput(secretScraper.Data); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -110,7 +113,6 @@ func isDir(p string) bool {
 // }
 
 func (c *Config) writeToFile(data map[string]interface{}) error {
-	// inputPath := vault.SanitizePath(strings.Replace(c.inputPath, "/metadata", "", 1))
 	var (
 		output string
 		err    error
@@ -187,20 +189,26 @@ func (c *Config) writeToFile(data map[string]interface{}) error {
 // 	}
 // }
 
-// // ProcessOutput takes action based on inputs to complete the
-// // desired output result
-// func (c *Config) ProcessOutput(m map[string]interface{}) error {
-// 	switch c.Output.GetKind() {
-// 	case "stdout":
-// 		print.Stdout(m, c.Output.GetEncoding())
-// 	default:
-// 		if err := c.writeToFile(m); err != nil {
-// 			return err
-// 		}
+// ProcessOutput takes action based on inputs to complete the
+// desired output result
+func (c *Config) ProcessOutput(m map[string]interface{}) error {
+	switch c.Output.GetKind() {
+	// case "k8s":
+	// 	// 	if err := ToKube(c, m); err != nil {
+	// 	// 		log.Fatalln(err.Error())
+	// 	// 	}
+	case "stdout":
+		print.Stdout(m, c.Output.GetEncoding())
+	default:
+		if err := c.writeToFile(m); err != nil {
+			return err
+		}
 
-// 	}
-// 	return nil
-// }
+	}
+
+	log.Printf("Discovered %v secrets\n", len(m))
+	return nil
+}
 
 // // GetInputPath
 // func (c *Config) GetInput() string {

@@ -140,16 +140,3 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 		}
 	}
 }
-
-// func (s *SecretScraper) ProcessOutput(o *output) {
-// 	switch o.GetKind() {
-// 	// case "k8s":
-// 	// 	if err := ToKube(c, s.Data); err != nil {
-// 	// 		log.Fatalln(err.Error())
-// 	// 	}
-// 	case "stdout":
-// 		print.Stdout(s.Data, o.GetEncoding())
-// 	default:
-// 		writeToFile(s.Data)
-// 	}
-// }

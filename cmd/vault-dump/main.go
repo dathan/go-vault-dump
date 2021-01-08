@@ -45,7 +45,10 @@ var (
 				return err
 			}
 
-			outputPath := ""
+			outputPath, err := os.Getwd()
+			if err != nil {
+				return err
+			}
 			if len(args) > 1 {
 				outputPath = args[1]
 			}
@@ -96,7 +99,7 @@ func init() {
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
 	rootCmd.PersistentFlags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
-	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "stdout", "output type, [stdout, file]")
+	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file (default)]")
 	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 }
