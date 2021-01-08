@@ -12,6 +12,7 @@ import (
 
 	"github.com/dathan/go-vault-dump/pkg/file"
 	"github.com/dathan/go-vault-dump/pkg/print"
+	"github.com/dathan/go-vault-dump/pkg/vault"
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
@@ -162,13 +163,13 @@ func (c *Config) writeToFile(data map[string]interface{}) error {
 // 	}
 // }
 
-// // GetPathForOutput
-// func GetPathForOutput(path string) string {
-// 	if path == "" {
-// 		path = "/tmp/vault-dump"
-// 	}
-// 	return vault.EnsureNoTrailingSlash(path)
-// }
+// GetPathForOutput
+func GetPathForOutput(path string) string {
+	if path == "" {
+		path = "/tmp/vault-dump"
+	}
+	return vault.EnsureNoTrailingSlash(path)
+}
 
 // // GetPathFromInput
 // func GetPathFromInput(c *vaultapi.Client, input string) string {

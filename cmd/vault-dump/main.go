@@ -45,13 +45,11 @@ var (
 				return err
 			}
 
-			outputPath, err := os.Getwd()
-			if err != nil {
-				return err
-			}
+			outputPath := ""
 			if len(args) > 1 {
 				outputPath = args[1]
 			}
+			outputPath = dump.GetPathForOutput(outputPath)
 
 			output, err := dump.NewOutput(
 				outputPath,
