@@ -23,7 +23,21 @@ var (
 	encoding   string
 	kubeconfig string
 	output     string
+	rootCmd    *cobra.Command
+)
 
+var (
+	// Verbose
+	Verbose bool
+)
+
+func exitErr(e error) {
+	log.SetOutput(os.Stderr)
+	log.Println(e)
+	os.Exit(1)
+}
+
+func init() {
 	rootCmd = &cobra.Command{
 		Use:   "vault-dump",
 		Short: "dump secrets from Vault",
@@ -77,20 +91,7 @@ var (
 			return nil
 		},
 	}
-)
 
-var (
-	// Verbose
-	Verbose bool
-)
-
-func exitErr(e error) {
-	log.SetOutput(os.Stderr)
-	log.Println(e)
-	os.Exit(1)
-}
-
-func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
