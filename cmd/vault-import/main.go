@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	vaFlag = "vault-addr"
-	vtFlag = "vault-token"
+	vaFlag          = "vault-addr"
+	vtFlag          = "vault-token"
+	ignoreKeysFlag  = "ignore-keys"
+	ignorePathsFlag = "ignore-paths"
 )
 
 var (
@@ -67,7 +69,12 @@ func init() {
 				Address: viper.GetString(vaFlag),
 				Retries: retries,
 				Token:   viper.GetString(vtFlag),
+				Ignore: &vault.Ignore{
+					Keys:  viper.GetStringSlice(ignoreKeysFlag),
+					Paths: viper.GetStringSlice(ignorePathsFlag),
+				},
 			})
+
 			if err != nil {
 				return err
 			}
@@ -94,9 +101,14 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
+	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&Brute, "brute", "", false, "retry failed indefinitely")
 	rootCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
+
+	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
+	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
 }
 
 func initConfig() {
