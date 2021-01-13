@@ -17,7 +17,14 @@ type Config struct {
 	Token   string
 	Client  *vaultapi.Client
 	Retries int
+	Ignore  *Ignore
 	memo    *sync.Map
+}
+
+// Ignore
+type Ignore struct {
+	Keys  []string
+	Paths []string
 }
 
 // NewClient

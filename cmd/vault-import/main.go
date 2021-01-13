@@ -14,12 +14,29 @@ import (
 )
 
 const (
-	vaFlag = "vault-addr"
-	vtFlag = "vault-token"
+	vaFlag          = "vault-addr"
+	vtFlag          = "vault-token"
+	ignoreKeysFlag  = "ignore-keys"
+	ignorePathsFlag = "ignore-paths"
 )
 
 var (
 	cfgFile string
+	rootCmd *cobra.Command
+
+	// Brute global var
+	Brute bool
+	// Verbose global var
+	Verbose bool
+)
+
+func exitErr(e error) {
+	log.SetOutput(os.Stderr)
+	log.Println(e)
+	os.Exit(1)
+}
+
+func init() {
 	rootCmd = &cobra.Command{
 		Use:   "vault-import",
 		Short: "import secrets to Vault",
@@ -52,7 +69,12 @@ var (
 				Address: viper.GetString(vaFlag),
 				Retries: retries,
 				Token:   viper.GetString(vtFlag),
+				Ignore: &vault.Ignore{
+					Keys:  viper.GetStringSlice(ignoreKeysFlag),
+					Paths: viper.GetStringSlice(ignorePathsFlag),
+				},
 			})
+
 			if err != nil {
 				return err
 			}
@@ -73,34 +95,20 @@ var (
 			return nil
 		},
 	}
-	// Brute global var
-	Brute bool
-	// Verbose global var
-	Verbose bool
-)
 
-func exitErr(e error) {
-	log.SetOutput(os.Stderr)
-	log.Println(e)
-	os.Exit(1)
-}
-
-func logSetup() {
-	log.SetFlags(0)
-	if Verbose {
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
-	}
-}
-
-func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
+	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&Brute, "brute", "", false, "retry failed indefinitely")
 	rootCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
+
+	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
+	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
 }
 
 func initConfig() {
@@ -123,6 +131,13 @@ func initConfig() {
 	viper.SetEnvPrefix("VAULT_IMPORT")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()
+}
+
+func logSetup() {
+	log.SetFlags(0)
+	if Verbose {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	}
 }
 
 func main() {
