@@ -20,6 +20,21 @@ const (
 
 var (
 	cfgFile string
+	rootCmd *cobra.Command
+
+	// Brute global var
+	Brute bool
+	// Verbose global var
+	Verbose bool
+)
+
+func exitErr(e error) {
+	log.SetOutput(os.Stderr)
+	log.Println(e)
+	os.Exit(1)
+}
+
+func init() {
 	rootCmd = &cobra.Command{
 		Use:   "vault-import",
 		Short: "import secrets to Vault",
@@ -73,26 +88,7 @@ var (
 			return nil
 		},
 	}
-	// Brute global var
-	Brute bool
-	// Verbose global var
-	Verbose bool
-)
 
-func exitErr(e error) {
-	log.SetOutput(os.Stderr)
-	log.Println(e)
-	os.Exit(1)
-}
-
-func logSetup() {
-	log.SetFlags(0)
-	if Verbose {
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
-	}
-}
-
-func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
@@ -123,6 +119,13 @@ func initConfig() {
 	viper.SetEnvPrefix("VAULT_IMPORT")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()
+}
+
+func logSetup() {
+	log.SetFlags(0)
+	if Verbose {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	}
 }
 
 func main() {
