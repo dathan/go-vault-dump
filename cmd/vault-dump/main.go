@@ -64,7 +64,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			fmt.Println(vc.Ignore)
+
 			outputPath := ""
 			if len(args) > 1 {
 				outputPath = args[1]
