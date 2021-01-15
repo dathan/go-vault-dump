@@ -13,28 +13,27 @@ import (
 	"github.com/dathan/go-vault-dump/pkg/file"
 	"github.com/dathan/go-vault-dump/pkg/print"
 	"github.com/dathan/go-vault-dump/pkg/vault"
-	vaultapi "github.com/hashicorp/vault/api"
 )
 
 // Config
 type Config struct {
-	Debug     bool
-	Client    *vaultapi.Client
-	InputPath string
-	Output    *output
+	Debug       bool
+	InputPath   string
+	Output      *output
+	VaultConfig *vault.Config
 }
 
 func New(c *Config) (*Config, error) {
 	return &Config{
-		Debug:     c.Debug,
-		Client:    c.Client,
-		InputPath: c.InputPath,
-		Output:    c.Output,
+		Debug:       c.Debug,
+		InputPath:   c.InputPath,
+		Output:      c.Output,
+		VaultConfig: c.VaultConfig,
 	}, nil
 }
 
 func (c *Config) Secrets() error {
-	secretScraper, err := NewSecretScraper(c.Client)
+	secretScraper, err := NewSecretScraper(c.VaultConfig)
 	if err != nil {
 		return err
 	}
