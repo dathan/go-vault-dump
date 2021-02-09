@@ -125,7 +125,9 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 				log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
 				continue
 			}
-
+			//
+			// handles case when the path does not have a vault value: No value found at XYZ
+			//
 			data := make(map[string]interface{})
 			// the path doesn't have a secret
 			if vaultSecret != nil {
