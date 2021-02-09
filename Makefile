@@ -5,7 +5,7 @@ default: build
 
 
 build:
-	cd cmd && go build .
+	cd ./cmd && go build ./...
 
 run:
 	time (cd cmd && go run . secret/ |sort -k1)
