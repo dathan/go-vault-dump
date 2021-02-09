@@ -123,13 +123,18 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 			vaultSecret, err := s.vault.Logical().Read(path)
 			if err != nil {
 				log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
+				continue
 			}
 
-			// secret engine v2 has a different response body
-			data := vaultSecret.Data["data"]
-			if data == nil {
-				// secret engine v1
-				data = vaultSecret.Data
+			data := make(map[string]interface{})
+			// the path doesn't have a secret
+			if vaultSecret != nil {
+				// secret engine v2 has a different response body
+				data := vaultSecret.Data["data"]
+				if data == nil {
+					// secret engine v1
+					data = vaultSecret.Data
+				}
 			}
 
 			secret := secret{
