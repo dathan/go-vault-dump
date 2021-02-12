@@ -140,19 +140,16 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 					log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
 				}
 
-				//
 				// handles case when the path does not have a vault value: No value found at XYZ
-				//
-				// data := make(map[string]interface{})
-				// the path doesn't have a secret
-				// if vaultSecret != nil {
-				// secret engine v2 has a different response body
-				data := vaultSecret.Data["data"]
-				if data == nil {
-					// secret engine v1
-					data = vaultSecret.Data
+				var data interface{}
+				if vaultSecret != nil {
+					// secret engine v2 has a different response body
+					data = vaultSecret.Data["data"]
+					if data == nil {
+						// secret engine v1
+						data = vaultSecret.Data
+					}
 				}
-				// }
 
 				secret := secret{
 					path: path,
