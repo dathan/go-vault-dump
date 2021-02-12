@@ -147,21 +147,21 @@ func (c *Config) secretProducer(ctx context.Context, secrets map[string]interfac
 			close(secretChan)
 			return
 		default:
-			qualified := true
+			ignored := false
 			for _, ip := range c.VaultConfig.Ignore.Paths {
 				if strings.HasPrefix(p, ip) {
-					qualified = false
+					ignored = true
 					break
 				}
 			}
 			for _, ik := range c.VaultConfig.Ignore.Keys {
 				if strings.HasSuffix(p, ik) {
-					qualified = false
+					ignored = true
 					break
 				}
 			}
 
-			if qualified {
+			if !ignored {
 				secretChan <- map[string]interface{}{
 					"k": p,
 					"v": s,

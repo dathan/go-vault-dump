@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/dathan/go-vault-dump/pkg/vault"
-	vaultapi "github.com/hashicorp/vault/api"
 )
 
 type secret struct {
@@ -24,14 +23,14 @@ type secretStream struct {
 	wg      *sync.WaitGroup
 }
 type SecretScraper struct {
-	context context.Context
-	find    *secretPathStream
-	secrets *secretStream
-	vault   *vaultapi.Client
-	Data    map[string]interface{}
+	context     context.Context
+	find        *secretPathStream
+	secrets     *secretStream
+	Data        map[string]interface{}
+	VaultConfig *vault.Config
 }
 
-func NewSecretScraper(vault *vaultapi.Client) (*SecretScraper, error) {
+func NewSecretScraper(vc *vault.Config) (*SecretScraper, error) {
 	return &SecretScraper{
 		context: context.Background(),
 		find: &secretPathStream{
@@ -42,8 +41,8 @@ func NewSecretScraper(vault *vaultapi.Client) (*SecretScraper, error) {
 			channel: make(chan secret),
 			wg:      new(sync.WaitGroup),
 		},
-		vault: vault,
-		Data:  make(map[string]interface{}),
+		VaultConfig: vc,
+		Data:        make(map[string]interface{}),
 	}, nil
 }
 
@@ -86,7 +85,7 @@ func (s *SecretScraper) secretFinder(ctx context.Context, cancelFunc context.Can
 		log.Println("Received signal to stop, stopping secretFinder")
 		return
 	default:
-		results, err := s.vault.Logical().List(path)
+		results, err := s.VaultConfig.Client.Logical().List(path)
 		if err != nil {
 			log.Printf("failed to list on path %s, %s\n", path, err.Error())
 		}
@@ -120,30 +119,44 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 			log.Println("Received signal to stop, stopping, secretProducer")
 			return
 		default:
-			vaultSecret, err := s.vault.Logical().Read(path)
-			if err != nil {
-				log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
-				continue
-			}
-			//
-			// handles case when the path does not have a vault value: No value found at XYZ
-			//
-			data := make(map[string]interface{})
-			// the path doesn't have a secret
-			if vaultSecret != nil {
-				// secret engine v2 has a different response body
-				data := vaultSecret.Data["data"]
-				if data == nil {
-					// secret engine v1
-					data = vaultSecret.Data
+			ignored := false
+			for _, ip := range s.VaultConfig.Ignore.Paths {
+				if strings.HasPrefix(path, ip) {
+					ignored = true
+					break
 				}
 			}
 
-			secret := secret{
-				path: path,
-				data: data,
+			for _, ik := range s.VaultConfig.Ignore.Keys {
+				if strings.HasSuffix(path, ik) {
+					ignored = true
+					break
+				}
 			}
-			s.secrets.channel <- secret
+
+			if !ignored {
+				vaultSecret, err := s.VaultConfig.Client.Logical().Read(path)
+				if err != nil {
+					log.Printf("failed to get secrets in %s, %s\n", path, err.Error())
+				}
+
+				// handles case when the path does not have a vault value: No value found at XYZ
+				var data interface{}
+				if vaultSecret != nil {
+					// secret engine v2 has a different response body
+					data = vaultSecret.Data["data"]
+					if data == nil {
+						// secret engine v1
+						data = vaultSecret.Data
+					}
+				}
+
+				secret := secret{
+					path: path,
+					data: data,
+				}
+				s.secrets.channel <- secret
+			}
 		}
 	}
 }
