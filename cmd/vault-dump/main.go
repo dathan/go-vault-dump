@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	vaFlag = "vault-addr"
-	vtFlag = "vault-token"
+	vaFlag          = "vault-addr"
+	vtFlag          = "vault-token"
+	ignoreKeysFlag  = "ignore-keys"
+	ignorePathsFlag = "ignore-paths"
 )
 
 var (
@@ -56,8 +58,12 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			v, err := vault.NewClient(&vault.Config{
+			vc, err := vault.NewClient(&vault.Config{
 				Address: viper.GetString(vaFlag),
+				Ignore: &vault.Ignore{
+					Keys:  viper.GetStringSlice(ignoreKeysFlag),
+					Paths: viper.GetStringSlice(ignorePathsFlag),
+				},
 				Retries: 5,
 				Token:   viper.GetString(vtFlag),
 			})
@@ -81,10 +87,10 @@ func init() {
 			}
 
 			dumper, err := dump.New(&dump.Config{
-				Debug:     Verbose,
-				Client:    v.Client,
-				InputPath: args[0],
-				Output:    output,
+				Debug:       Verbose,
+				InputPath:   args[0],
+				Output:      output,
+				VaultConfig: vc,
 			})
 			if err != nil {
 				return err
@@ -103,11 +109,16 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
+	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.PersistentFlags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file (default)]")
 	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.Version = version
+
+	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
+	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
 }
 
 func initConfig() {
