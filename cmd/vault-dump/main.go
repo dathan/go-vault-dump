@@ -24,6 +24,12 @@ var (
 	kubeconfig string
 	output     string
 	rootCmd    *cobra.Command
+
+	// https://goreleaser.com/environment/#using-the-mainversion
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
 )
 
 var (
@@ -101,6 +107,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file (default)]")
 	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.Version = version
 }
 
 func initConfig() {
