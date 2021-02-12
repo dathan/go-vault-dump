@@ -28,6 +28,12 @@ var (
 	Brute bool
 	// Verbose global var
 	Verbose bool
+
+	// https://goreleaser.com/environment/#using-the-mainversion
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
 )
 
 func exitErr(e error) {
@@ -106,6 +112,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&Brute, "brute", "", false, "retry failed indefinitely")
 	rootCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
+	rootCmd.Version = version
 
 	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
 	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))

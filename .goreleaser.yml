@@ -1,0 +1,59 @@
+# Make sure to check the documentation at https://goreleaser.com/customization/
+before:
+  hooks:
+    - go mod download
+builds:
+  - &build
+    id: dump
+    dir: cmd/vault-dump
+    binary: vault-dump
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser
+    mod_timestamp: '{{ .CommitTimestamp }}'
+  -
+    <<: *build
+    id: import
+    dir: cmd/vault-import
+    binary: vault-import
+
+archives:
+  - &archive
+    id: dump
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      amd64: x86_64
+  -
+    <<: *archive
+    id: import
+
+checksum:
+  ids:
+    - dump
+    - import
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}-rc"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+signs:
+  - artifacts: checksum
+release:
+  github:
+    owner: johnbuhay
+    name: go-vault-dump
+  ids:
+    - dump
+    - import

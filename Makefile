@@ -5,10 +5,10 @@ default: build
 
 
 build:
-	cd cmd && go build .
+	cd ./cmd && go build ./...
 
 run:
-	time (cd cmd && go run . secret/ |sort -k1)
+	time (go run ./cmd/vault-dump/main.go --config ./griffin.yml secret/wefi)
 
 checks: fmt-check
 
