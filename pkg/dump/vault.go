@@ -156,6 +156,7 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 					data: data,
 				}
 				s.secrets.channel <- secret
+				log.Println("created secret from:", path)
 			}
 		}
 	}

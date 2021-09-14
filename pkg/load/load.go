@@ -183,7 +183,17 @@ func (c *Config) secretConsumer(ctx context.Context, secretChan chan map[string]
 			log.Println("Received signal to stop, stopping OverwriteSecret")
 			return
 		default:
-			if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
+
+			if s["v"] == nil {
+				log.Println("secret value is nil", s["k"])
+				return
+			}
+			secret, ok := s["v"].(map[string]interface{})
+			if !ok {
+				log.Println("type checking failed", s["k"])
+				return
+			}
+			if err := c.VaultConfig.OverwriteSecret(s["k"].(string), secret); err != nil {
 				errSlice := strings.Split(err.Error(), ":")
 				errID := strings.TrimSpace(errSlice[len(errSlice)-1])
 				count, ok := c.errInfo.count.LoadOrStore(errID, 1)
