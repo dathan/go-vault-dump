@@ -19,6 +19,7 @@ import (
 type Config struct {
 	Debug       bool
 	InputPath   string
+	Filename    string
 	Output      *output
 	VaultConfig *vault.Config
 }
@@ -27,6 +28,7 @@ func New(c *Config) (*Config, error) {
 	return &Config{
 		Debug:       c.Debug,
 		InputPath:   c.InputPath,
+		Filename:    c.Filename,
 		Output:      c.Output,
 		VaultConfig: c.VaultConfig,
 	}, nil
@@ -131,7 +133,7 @@ func (c *Config) writeToFile(data map[string]interface{}) error {
 		}
 	}
 
-	filename := fmt.Sprintf("%s/%s.%s", c.Output.GetPath(), c.InputPath, c.Output.GetEncoding())
+	filename := fmt.Sprintf("%s/%s.%s", c.Output.GetPath(), c.Filename, c.Output.GetEncoding())
 	if ok := file.WriteFile(filename, output); !ok {
 		return fmt.Errorf("failed to write %v", filename)
 	}

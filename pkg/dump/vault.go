@@ -50,8 +50,10 @@ func NewSecretScraper(vc *vault.Config) (*SecretScraper, error) {
 func (s *SecretScraper) Run(path string, n int) error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
-	s.find.wg.Add(1)
-	go s.secretFinder(ctx, cancelFunc, path)
+	for _, vv := range strings.Split(path, ",") {
+		s.find.wg.Add(1)
+		go s.secretFinder(ctx, cancelFunc, vv)
+	}
 
 	s.secrets.wg.Add(n)
 	for i := 0; i != n; i++ {

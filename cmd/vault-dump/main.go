@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	fileFlag        = "filename"
 	vaFlag          = "vault-addr"
 	vtFlag          = "vault-token"
 	ignoreKeysFlag  = "ignore-keys"
@@ -86,9 +87,12 @@ func init() {
 				return err
 			}
 
+			outputFilename := viper.GetString(fileFlag)
+
 			dumper, err := dump.New(&dump.Config{
 				Debug:       Verbose,
 				InputPath:   args[0],
+				Filename:    outputFilename,
 				Output:      output,
 				VaultConfig: vc,
 			})
@@ -109,6 +113,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().String(fileFlag, "vault-dump", "output filename (an extension will be added)")
 	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
 	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.PersistentFlags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
@@ -119,6 +124,7 @@ func init() {
 
 	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
 	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
+	viper.BindPFlag(fileFlag, rootCmd.PersistentFlags().Lookup(fileFlag))
 	viper.BindPFlag(vaFlag, rootCmd.PersistentFlags().Lookup(vaFlag))
 	viper.BindPFlag(vtFlag, rootCmd.PersistentFlags().Lookup(vtFlag))
 }
