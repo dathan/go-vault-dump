@@ -119,6 +119,8 @@ func init() {
 
 	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
 	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
+	viper.BindPFlag(vaFlag, rootCmd.PersistentFlags().Lookup(vaFlag))
+	viper.BindPFlag(vtFlag, rootCmd.PersistentFlags().Lookup(vtFlag))
 }
 
 func initConfig() {
