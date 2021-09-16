@@ -46,7 +46,7 @@ func (o *output) setEncoding(s string) bool {
 	return false
 }
 func (o *output) setKind(s string) bool {
-	expectedKinds := []string{"file", "k8s", "stdout"}
+	expectedKinds := []string{"file", "k8s", "stdout", "s3"}
 	for _, k := range expectedKinds {
 		if s == k {
 			o.kind = s

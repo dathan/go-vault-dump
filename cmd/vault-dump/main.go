@@ -3,10 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/dathan/go-vault-dump/pkg/aws"
 	"github.com/dathan/go-vault-dump/pkg/dump"
 	"github.com/dathan/go-vault-dump/pkg/vault"
 	"github.com/spf13/cobra"
@@ -24,8 +26,10 @@ const (
 var (
 	cfgFile    string
 	encoding   string
+	kmsKey     string
 	kubeconfig string
 	output     string
+	tmpdir     string
 	rootCmd    *cobra.Command
 
 	// https://goreleaser.com/environment/#using-the-mainversion
@@ -48,7 +52,7 @@ func exitErr(e error) {
 
 func init() {
 	rootCmd = &cobra.Command{
-		Use:   "vault-dump",
+		Use:   "vault-dump [flags] <path[,...]> <destination>",
 		Short: "dump secrets from Vault",
 		Long:  ``,
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -76,9 +80,28 @@ func init() {
 			if len(args) > 1 {
 				outputPath = args[1]
 			}
+			
+			s3path := ""
+			if output == "s3" {
+				if kmsKey == "" {
+					return errors.New("Error: KMS key must be specified for S3 upload")
+				} 
+				if outputPath == "" {
+					return errors.New("Error: Must specify an output path for S3 upload")
+				}
+				s3path = outputPath
+				if (len(s3path) < 5 || s3path[:5] != "s3://") {
+					return errors.New("Error: Output path for S3 upload must begin with s3://")
+				}
+				outputPath, err = ioutil.TempDir("", "vault-dump-*")
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			defer os.RemoveAll(outputPath)
 			outputPath = dump.GetPathForOutput(outputPath)
 
-			output, err := dump.NewOutput(
+			outputConfig, err := dump.NewOutput(
 				outputPath,
 				encoding,
 				output,
@@ -88,12 +111,11 @@ func init() {
 			}
 
 			outputFilename := viper.GetString(fileFlag)
-
 			dumper, err := dump.New(&dump.Config{
 				Debug:       Verbose,
 				InputPath:   args[0],
 				Filename:    outputFilename,
-				Output:      output,
+				Output:      outputConfig,
 				VaultConfig: vc,
 			})
 			if err != nil {
@@ -102,6 +124,19 @@ func init() {
 
 			if err := dumper.Secrets(); err != nil {
 				return err
+			}
+
+			if output == "s3" {
+				srcPath := fmt.Sprintf("%s/%s.%s", outputPath, outputFilename, encoding)
+				dstPath := fmt.Sprintf("%s/%s.%s", s3path, outputFilename, encoding)
+				ciphertext, err := aws.Encrypt(srcPath, kmsKey)
+				if err != nil {
+					return err
+				}
+				err = aws.Upload(dstPath, ciphertext)
+				if err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -117,8 +152,9 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
 	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.PersistentFlags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
-	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file (default)]")
+	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file, s3]")
 	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
+	rootCmd.PersistentFlags().StringVar(&kmsKey, "kms-key", "", "KMS encryption key ARN (required for S3 uploads)")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.Version = version
 

@@ -3,10 +3,13 @@ module github.com/dathan/go-vault-dump
 go 1.12
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.9.0 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.8.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/kms v1.6.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.15.1 // indirect
 	github.com/frankban/quicktest v1.4.1 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-test/deep v1.0.2 // indirect
-	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/googleapis/gnostic v0.5.1 // indirect
 	github.com/hashicorp/vault/api v1.0.5-0.20191108163347-bdd38fca2cff
 	github.com/hashicorp/vault/sdk v0.1.14-0.20191112033314-390e96e22eb2 // indirect
