@@ -1,14 +1,14 @@
 ---
-# https://hub.docker.com/_/vault?tab=tags
-
 version: "3"
 services:
   vault:
     container_name: vault
-    image: vault:1.5.4
+    image: vault:1.6.2
     ports:
-      - 8200:8200
+      - "8200:8200"
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID:
-    cap_add:
-      - IPC_LOCK
+      - VAULT_ADDR=http://localhost:8200/
+      - VAULT_TOKEN=Test_123
+      - VAULT_DEV_ROOT_TOKEN_ID=Test_123
+
+

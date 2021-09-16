@@ -94,7 +94,7 @@ func (s *SecretScraper) secretFinder(ctx context.Context, cancelFunc context.Can
 			log.Printf("No entries found at %s\n", path) // if a path is a leaf, this will occur
 		} else {
 			for _, v := range data {
-				newpath := vault.EnsureNoTrailingSlash(path + "/" + v.(string))
+				newpath := vault.EnsureNoTrailingSlash(path) + "/" + vault.EnsureNoTrailingSlash(v.(string))
 				if isDir(v.(string)) {
 					s.find.wg.Add(1)
 					s.secretFinder(ctx, cancelFunc, newpath)
