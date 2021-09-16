@@ -91,7 +91,8 @@ func (s *SecretScraper) secretFinder(ctx context.Context, cancelFunc context.Can
 		}
 
 		if data, ok := vault.ExtractListData(results); !ok {
-			log.Printf("No entries found at %s\n", path) // if a path is a leaf, this will occur
+			// maybe it's leaf node; if not, secretProducer will filter it out
+			s.find.secretpath <- strings.Replace(vault.EnsureNoTrailingSlash(path), "metadata", "data", 1)
 		} else {
 			for _, v := range data {
 				newpath := vault.EnsureNoTrailingSlash(path) + "/" + vault.EnsureNoTrailingSlash(v.(string))
@@ -151,12 +152,16 @@ func (s *SecretScraper) secretProducer(ctx context.Context, cancelFunc context.C
 					}
 				}
 
-				secret := secret{
-					path: path,
-					data: data,
+				if data != nil {
+					secret := secret{
+						path: path,
+						data: data,
+					}
+					s.secrets.channel <- secret
+					log.Println("created secret from:", path)
+				} else {
+					log.Println("No entries found at:", path)
 				}
-				s.secrets.channel <- secret
-				log.Println("created secret from:", path)
 			}
 		}
 	}
