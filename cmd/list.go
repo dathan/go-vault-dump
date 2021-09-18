@@ -12,19 +12,20 @@ import (
 )
 
 var (
+	listCmd *cobra.Command
+)
+
+func init() {
 	listCmd = &cobra.Command{
 		Use:   "list s3://<bucket>/[path]",
 		Short: "Lists vault state files in an S3 bucket",
 		Args:  cobra.ExactArgs(1),
-		RunE:  list_exports,
+		RunE:  listExports,
 	}
-)
-
-func init() {
 	rootCmd.AddCommand(listCmd)
 }
 
-func list_exports(cmd *cobra.Command, args []string) error {
+func listExports(cmd *cobra.Command, args []string) error {
 
 	s3path := args[0]
 	if s3path == "" {

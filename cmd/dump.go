@@ -22,7 +22,6 @@ const (
 	ignoreKeysFlag  = "ignore-keys"
 	ignorePathsFlag = "ignore-paths"
 	kmsKeyFlag      = "kms-key"
-	pathsFlag       = "path"
 	regionFlag      = "aws-region"
 	vaFlag          = "vault-addr"
 	vtFlag          = "vault-token"
@@ -44,7 +43,6 @@ var (
 )
 
 var (
-	// Verbose
 	Verbose bool
 )
 
@@ -56,21 +54,21 @@ func exitErr(e error) {
 
 func init() {
 	rootCmd = &cobra.Command{
-		Use:   "vault-dump",
+		Use:   "vault-dump [flags] /vault/path[,...]",
 		Short: "dump secrets from Vault",
+		Args:  cobra.ExactArgs(1),
 		RunE:  dumpVault,
 	}
 
 	logSetup()
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.Flags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
 	rootCmd.Flags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.Flags().String(vtFlag, "", "vault token")
 	rootCmd.Flags().StringP(fileFlag, "f", "vault-dump", "output filename (.json or .yaml extension will be added)")
 	rootCmd.Flags().String(kmsKeyFlag, "", "KMS encryption key ARN (required for S3 uploads)")
 	rootCmd.Flags().String(regionFlag, "us-east-1", "AWS region for KMS")
-	rootCmd.Flags().StringP(pathsFlag, "p", "", "comma separated list of vault paths to export")
 	rootCmd.Flags().StringP(destFlag, "d", "", "output directory or S3 path")
 	rootCmd.Flags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
 	rootCmd.Flags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
@@ -82,7 +80,6 @@ func init() {
 
 	viper.BindPFlag(fileFlag, rootCmd.Flags().Lookup(fileFlag))
 	viper.BindPFlag(destFlag, rootCmd.Flags().Lookup(destFlag))
-	viper.BindPFlag(pathsFlag, rootCmd.Flags().Lookup(pathsFlag))
 	viper.BindPFlag(ignorePathsFlag, rootCmd.Flags().Lookup(ignorePathsFlag))
 	viper.BindPFlag(kmsKeyFlag, rootCmd.Flags().Lookup(kmsKeyFlag))
 	viper.BindPFlag(regionFlag, rootCmd.Flags().Lookup(regionFlag))
@@ -126,10 +123,7 @@ func Execute() {
 
 func dumpVault(cmd *cobra.Command, args []string) error {
 
-	paths := viper.GetString(pathsFlag)
-	if paths == "" {
-		return errors.New(fmt.Sprintf("'%s' is a required argument but not found", pathsFlag))
-	}
+	paths := args[0]
 
 	vc, err := vault.NewClient(&vault.Config{
 		Address: viper.GetString(vaFlag),
@@ -164,7 +158,11 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 			log.Fatal(err)
 		}
 	}
-	defer os.RemoveAll(outputPath)
+	defer func() {
+		if output == "s3" {
+			os.RemoveAll(outputPath)
+		}
+	}()
 	outputPath = dump.GetPathForOutput(outputPath)
 
 	outputConfig, err := dump.NewOutput(
@@ -197,7 +195,7 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 		dstPath := fmt.Sprintf("%s/%s.%s.%s", s3path, outputFilename, encoding, cryptExt)
 		data, err := os.ReadFile(srcPath)
 		if err != nil {
-			// This is expected if no secrets were dumps
+			// This is expected if no secrets were dumped
 			log.Println("Nothing to upload")
 			return nil
 		}
