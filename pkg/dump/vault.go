@@ -100,7 +100,7 @@ func (s *SecretScraper) secretFinder(ctx context.Context, cancelFunc context.Can
 				newpath := vault.EnsureNoTrailingSlash(path) + "/" + vault.EnsureNoTrailingSlash(v.(string))
 				if isDir(v.(string)) {
 					s.find.wg.Add(1)
-					s.secretFinder(ctx, cancelFunc, newpath)
+					go s.secretFinder(ctx, cancelFunc, newpath)
 				} else {
 
 					// reconciling v2 secret engine requirement for list operation

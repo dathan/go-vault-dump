@@ -11,7 +11,7 @@ import (
 	"github.com/dathan/go-vault-dump/pkg/vault"
 )
 
-type ListS3 struct {
+type S3ListResult struct {
 	Key  string
 	Size int
 }
@@ -38,7 +38,7 @@ func Upload(s3path string, body string) error {
 	return nil
 }
 
-func List(s3path string, ext string) ([]ListS3, error) {
+func List(s3path string, ext string) ([]S3ListResult, error) {
 
 	s3bucket := strings.Split(s3path[len("s3://"):], "/")[0]
 	s3prefix := vault.EnsureNoLeadingSlash(s3path[len("s3://"+s3bucket):])
@@ -57,11 +57,11 @@ func List(s3path string, ext string) ([]ListS3, error) {
 		log.Fatal(err)
 	}
 
-	results := make([]ListS3, 0)
+	results := make([]S3ListResult, 0)
 	for _, vv := range output.Contents {
 		keyStr := aws.ToString(vv.Key)
 		if keyStr[len(keyStr)-len(ext):] == ext {
-			results = append(results, ListS3{Key: keyStr, Size: int(vv.Size)})
+			results = append(results, S3ListResult{Key: keyStr, Size: int(vv.Size)})
 		}
 	}
 
