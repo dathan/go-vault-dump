@@ -26,39 +26,39 @@ package aws
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
+	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kms"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
 
 const (
 	kmsApp    = "vault-dump"
-	kmsCipher = "AES_256"
+	kmsCipher = types.DataKeySpecAes256
 )
 
-func Encrypt(plaintext string, kmsKey string, region string) (string, error) {
+func KMSEncrypt(plaintext string, kmsKey string, region string) (string, error) {
 
-	// get data encryption keys from KMS4
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(region),
-	})
+	// get data encryption keys from KMS
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
 	if err != nil {
 		return "", err
 	}
-	kmssvc := kms.New(sess)
+	kmssvc := kms.NewFromConfig(cfg)
+
 	params := &kms.GenerateDataKeyInput{
-		KeyId: aws.String(kmsKey),
-		EncryptionContext: map[string]*string{
-			"Application": aws.String(kmsApp),
-		},
-		KeySpec: aws.String(kmsCipher),
+		KeyId:   aws.String(kmsKey),
+		KeySpec: kmsCipher,
 	}
-	resp, err := kmssvc.GenerateDataKey(params)
+	resp, err := kmssvc.GenerateDataKey(context.TODO(), params)
 	if err != nil {
 		return "", err
 	}
@@ -73,28 +73,83 @@ func Encrypt(plaintext string, kmsKey string, region string) (string, error) {
 	}
 
 	// apply pkcs#7 padding tp plaintext
-	padding := aes.BlockSize - (len(plaintext) % aes.BlockSize)
-	paddedtext := []byte(plaintext)
-	for i := 0; i < padding; i++ {
-		paddedtext = append(paddedtext, byte(padding))
+	data := []byte(plaintext)
+	padding := aes.BlockSize - (len(data) % aes.BlockSize)
+	for ii := 0; ii < padding; ii++ {
+		data = append(data, byte(padding))
 	}
 
 	// encrypt padded plaintext
-	ciphertext := make([]byte, len(paddedtext))
 	c, err := aes.NewCipher(plainkey)
 	if err != nil {
 		return "", err
 	}
 	mode := cipher.NewCBCEncrypter(c, salt)
-	mode.CryptBlocks(ciphertext, paddedtext)
+	mode.CryptBlocks(data, data)
 
 	// combine metadata with ciphertext and base64 encode
-	sep := []byte(kmsApp)
-	bufferslice := [][]byte{cipherkey, salt, ciphertext}
-	data := bytes.Join(bufferslice, sep)
-	encodelen := base64.RawStdEncoding.EncodedLen(len(data))
-	encrypted := make([]byte, encodelen)
-	base64.RawStdEncoding.Encode(encrypted, data)
+	sep := []byte{0, 1, 0, 1, 0, 1}
+	bufferslice := [][]byte{cipherkey, salt, data}
+	combined := bytes.Join(bufferslice, sep)
+	encoded := base64.URLEncoding.EncodeToString(combined)
 
-	return string(encrypted), nil
+	return encoded, nil
+}
+
+func KMSDecrypt(ciphertext string, region string) (string, error) {
+
+	// split metadata and ciphertext
+	decoded, err := base64.URLEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return "", err
+	}
+	sep := []byte{0, 1, 0, 1, 0, 1}
+	sliced := bytes.SplitN(decoded, sep, 3)
+	cipherkey := sliced[0]
+	salt := sliced[1]
+	data := sliced[2]
+
+	// decrypt decryption key
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		return "", err
+	}
+	kmssvc := kms.NewFromConfig(cfg)
+
+	keyparams := &kms.DecryptInput{
+		CiphertextBlob: cipherkey,
+	}
+	response, err := kmssvc.Decrypt(context.TODO(), keyparams)
+	if err != nil {
+		return "", err
+	}
+
+	plainkey := response.Plaintext
+
+	// decrypt data
+	block, err := aes.NewCipher(plainkey)
+	if err != nil {
+		return "", err
+	}
+	mode := cipher.NewCBCDecrypter(block, salt)
+	mode.CryptBlocks(data, data)
+
+	// remove pkcs#7 padding
+	if len(data) == 0 {
+		return "", errors.New("Empty payload")
+	}
+	padding := data[len(data)-1]
+
+	if int(padding) > len(data) || int(padding) > aes.BlockSize {
+		return "", errors.New(fmt.Sprintf("Padding %d larger than block size %d or data %d", padding, aes.BlockSize, len(data)))
+	} else if padding == 0 {
+		return "", errors.New("Does not contain proper padding")
+	}
+	for ii := len(data) - 1; ii > len(data)-int(padding)-1; ii-- {
+		if data[ii] != padding {
+			return "", errors.New("Padded value larger than padding")
+		}
+	}
+
+	return string(data[:len(data)-int(padding)]), nil
 }

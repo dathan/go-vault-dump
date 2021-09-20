@@ -64,27 +64,28 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
-	rootCmd.Flags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
-	rootCmd.Flags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
+	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	rootCmd.PersistentFlags().String(regionFlag, "us-east-1", "AWS region for KMS")
+	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
+	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
+	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.Flags().StringP(fileFlag, "f", "vault-dump", "output filename (.json or .yaml extension will be added)")
 	rootCmd.Flags().String(kmsKeyFlag, "", "KMS encryption key ARN (required for S3 uploads)")
-	rootCmd.Flags().String(regionFlag, "us-east-1", "AWS region for KMS")
 	rootCmd.Flags().StringP(destFlag, "d", "", "output directory or S3 path")
-	rootCmd.Flags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
-	rootCmd.Flags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.Flags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
 	rootCmd.Flags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file, s3]")
 	rootCmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
-	rootCmd.Flags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.Version = version
 
+	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
+	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
+	viper.BindPFlag(regionFlag, rootCmd.PersistentFlags().Lookup(regionFlag))
+	viper.BindPFlag(vaFlag, rootCmd.PersistentFlags().Lookup(vaFlag))
+	viper.BindPFlag(vtFlag, rootCmd.PersistentFlags().Lookup(vtFlag))
 	viper.BindPFlag(fileFlag, rootCmd.Flags().Lookup(fileFlag))
 	viper.BindPFlag(destFlag, rootCmd.Flags().Lookup(destFlag))
-	viper.BindPFlag(ignorePathsFlag, rootCmd.Flags().Lookup(ignorePathsFlag))
 	viper.BindPFlag(kmsKeyFlag, rootCmd.Flags().Lookup(kmsKeyFlag))
-	viper.BindPFlag(regionFlag, rootCmd.Flags().Lookup(regionFlag))
-	viper.BindPFlag(vaFlag, rootCmd.Flags().Lookup(vaFlag))
-	viper.BindPFlag(vtFlag, rootCmd.Flags().Lookup(vtFlag))
 }
 
 func initConfig() {
@@ -139,6 +140,9 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 	}
 
 	outputPath := viper.GetString(destFlag)
+	if len(outputPath) > 5 && outputPath[:5] == "s3://" {
+		output = "s3"
+	}
 
 	s3path := ""
 	kmsKey := viper.GetString(kmsKeyFlag)
@@ -193,18 +197,17 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 	if output == "s3" {
 		srcPath := fmt.Sprintf("%s/%s.%s", outputPath, outputFilename, encoding)
 		dstPath := fmt.Sprintf("%s/%s.%s.%s", s3path, outputFilename, encoding, cryptExt)
-		data, err := os.ReadFile(srcPath)
+		plaintext, err := os.ReadFile(srcPath)
 		if err != nil {
 			// This is expected if no secrets were dumped
 			log.Println("Nothing to upload")
 			return nil
 		}
-		plaintext := string(data)
-		ciphertext, err := aws.Encrypt(plaintext, kmsKey, viper.GetString(regionFlag))
+		ciphertext, err := aws.KMSEncrypt(string(plaintext), kmsKey, viper.GetString(regionFlag))
 		if err != nil {
 			return err
 		}
-		err = aws.Upload(dstPath, ciphertext)
+		err = aws.S3Put(dstPath, ciphertext)
 		if err != nil {
 			return err
 		}

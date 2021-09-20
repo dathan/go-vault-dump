@@ -1,6 +1,14 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"strings"
+
+	"github.com/dathan/go-vault-dump/pkg/aws"
+	"github.com/dathan/go-vault-dump/pkg/file"
 	"github.com/dathan/go-vault-dump/pkg/load"
 	"github.com/dathan/go-vault-dump/pkg/vault"
 	"github.com/spf13/cobra"
@@ -21,23 +29,12 @@ func init() {
 	}
 	rootCmd.AddCommand(importCmd)
 
-	importCmd.Flags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
-	importCmd.Flags().String(vtFlag, "", "vault token")
-	importCmd.Flags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
-	importCmd.Flags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
-	importCmd.Flags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	importCmd.Flags().BoolVarP(&Brute, "brute", "", false, "retry failed indefinitely")
 	importCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
 
 }
 
 func importVault(cmd *cobra.Command, args []string) error {
-
-	//let's take over from rootCmd
-	viper.BindPFlag(ignoreKeysFlag, importCmd.Flags().Lookup(ignoreKeysFlag))
-	viper.BindPFlag(ignorePathsFlag, importCmd.Flags().Lookup(ignorePathsFlag))
-	viper.BindPFlag(vaFlag, importCmd.Flags().Lookup(vaFlag))
-	viper.BindPFlag(vtFlag, importCmd.Flags().Lookup(vtFlag))
 
 	retries := 5
 	if Brute {
@@ -66,13 +63,39 @@ func importVault(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	filename := args[0]
+	filepath := args[0]
+	fromS3 := len(filepath) > 5 && filepath[:5] == "s3://"
+	tmpDir := ""
 
-	if len(filename) > 5 && filename[:5] == "s3://" {
-		//TODO
+	if fromS3 {
+		encrypted, err := aws.S3Get(filepath)
+		if err != nil {
+			return err
+		}
+		plaintext, err := aws.KMSDecrypt(string(encrypted), viper.GetString(regionFlag))
+		if err != nil {
+			return err
+		}
+		tmpDir, err = ioutil.TempDir("", "vault-dump-*")
+		if err != nil {
+			return err
+		}
+		pathslices := strings.Split(filepath, "/")
+		filename := pathslices[len(pathslices)-1]
+		filepath = fmt.Sprintf("%s/%s", vault.EnsureNoTrailingSlash(tmpDir), filename)
+		ok := file.WriteFile(filepath, plaintext)
+		if !ok {
+			os.RemoveAll(tmpDir)
+			return errors.New(fmt.Sprintf("Error writing %s", filepath))
+		}
 	}
+	defer func() {
+		if fromS3 {
+			os.RemoveAll(tmpDir)
+		}
+	}()
 
-	if err := loader.FromFile(filename); err != nil {
+	if err := loader.FromFile(filepath); err != nil {
 		return err
 	}
 

@@ -35,7 +35,7 @@ func listExports(cmd *cobra.Command, args []string) error {
 		return errors.New("Error: 'path' must begin with s3://")
 	}
 
-	results, err := aws.List(s3path, "."+cryptExt)
+	results, err := aws.S3List(s3path, "."+cryptExt)
 	if err != nil {
 		return err
 	}
