@@ -9,6 +9,10 @@ import (
 	"github.com/dathan/go-vault-dump/pkg/vault"
 )
 
+const (
+	bufsize = 1000
+)
+
 type secret struct {
 	path string
 	data interface{}
@@ -34,11 +38,11 @@ func NewSecretScraper(vc *vault.Config) (*SecretScraper, error) {
 	return &SecretScraper{
 		context: context.Background(),
 		find: &secretPathStream{
-			secretpath: make(chan string),
+			secretpath: make(chan string, bufsize),
 			wg:         new(sync.WaitGroup),
 		},
 		secrets: &secretStream{
-			channel: make(chan secret),
+			channel: make(chan secret, bufsize),
 			wg:      new(sync.WaitGroup),
 		},
 		VaultConfig: vc,
@@ -87,10 +91,7 @@ func (s *SecretScraper) secretFinder(ctx context.Context, cancelFunc context.Can
 		log.Println("Received signal to stop, stopping secretFinder")
 		return
 	default:
-		results, err := s.VaultConfig.Client.Logical().List(path)
-		if err != nil {
-			log.Printf("failed to list on path %s, %s\n", path, err.Error())
-		}
+		results, _ := s.VaultConfig.Client.Logical().List(path)
 
 		if data, ok := vault.ExtractListData(results); !ok {
 			// maybe it's leaf node; if not, secretProducer will filter it out
