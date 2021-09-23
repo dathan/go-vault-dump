@@ -22,7 +22,6 @@ const (
 	ignoreKeysFlag  = "ignore-keys"
 	ignorePathsFlag = "ignore-paths"
 	kmsKeyFlag      = "kms-key"
-	regionFlag      = "aws-region"
 	vaFlag          = "vault-addr"
 	vtFlag          = "vault-token"
 )
@@ -66,7 +65,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
 	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
 	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
-	rootCmd.PersistentFlags().String(regionFlag, "us-east-1", "AWS region for KMS")
 	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
 	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
@@ -80,7 +78,6 @@ func init() {
 
 	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
 	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
-	viper.BindPFlag(regionFlag, rootCmd.PersistentFlags().Lookup(regionFlag))
 	viper.BindPFlag(vaFlag, rootCmd.PersistentFlags().Lookup(vaFlag))
 	viper.BindPFlag(vtFlag, rootCmd.PersistentFlags().Lookup(vtFlag))
 	viper.BindPFlag(fileFlag, rootCmd.Flags().Lookup(fileFlag))
@@ -203,7 +200,7 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 			log.Println("Nothing to upload")
 			return nil
 		}
-		ciphertext, err := aws.KMSEncrypt(string(plaintext), kmsKey, viper.GetString(regionFlag))
+		ciphertext, err := aws.KMSEncrypt(string(plaintext), kmsKey)
 		if err != nil {
 			return err
 		}

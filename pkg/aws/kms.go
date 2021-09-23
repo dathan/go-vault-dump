@@ -35,7 +35,6 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 )
@@ -45,15 +44,10 @@ const (
 	kmsCipher = types.DataKeySpecAes256
 )
 
-func KMSEncrypt(plaintext string, kmsKey string, region string) (string, error) {
+func KMSEncrypt(plaintext string, kmsKey string) (string, error) {
 
 	// get data encryption keys from KMS
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
-	if err != nil {
-		return "", err
-	}
-	kmssvc := kms.NewFromConfig(cfg)
-
+	kmssvc := NewKMSClient()
 	params := &kms.GenerateDataKeyInput{
 		KeyId:   aws.String(kmsKey),
 		KeySpec: kmsCipher,
@@ -96,7 +90,7 @@ func KMSEncrypt(plaintext string, kmsKey string, region string) (string, error) 
 	return encoded, nil
 }
 
-func KMSDecrypt(ciphertext string, region string) (string, error) {
+func KMSDecrypt(ciphertext string) (string, error) {
 
 	// split metadata and ciphertext
 	decoded, err := base64.URLEncoding.DecodeString(ciphertext)
@@ -110,11 +104,7 @@ func KMSDecrypt(ciphertext string, region string) (string, error) {
 	data := sliced[2]
 
 	// decrypt decryption key
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
-	if err != nil {
-		return "", err
-	}
-	kmssvc := kms.NewFromConfig(cfg)
+	kmssvc := NewKMSClient()
 
 	keyparams := &kms.DecryptInput{
 		CiphertextBlob: cipherkey,

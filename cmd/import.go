@@ -72,7 +72,7 @@ func importVault(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		plaintext, err := aws.KMSDecrypt(string(encrypted), viper.GetString(regionFlag))
+		plaintext, err := aws.KMSDecrypt(string(encrypted))
 		if err != nil {
 			return err
 		}
