@@ -57,5 +57,8 @@ func NewKMSClient() *kms.Client {
 }
 
 func NewS3Client() *s3.Client {
-	return s3.NewFromConfig(AWSConfig)
+	return s3.NewFromConfig(AWSConfig, func(o *s3.Options) {
+		o.UsePathStyle = true
+	})
+
 }

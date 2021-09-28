@@ -46,7 +46,7 @@ func S3List(s3path string, ext string) ([]S3ListResult, error) {
 		Prefix: aws.String(s3prefix),
 	})
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	results := make([]S3ListResult, 0)

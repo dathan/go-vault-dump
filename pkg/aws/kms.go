@@ -99,6 +99,9 @@ func KMSDecrypt(ciphertext string) (string, error) {
 	}
 	sep := []byte{0, 1, 0, 1, 0, 1}
 	sliced := bytes.SplitN(decoded, sep, 3)
+	if len(sliced) < 3 {
+		return "", errors.New("Failed to extract encrypted metadata")
+	}
 	cipherkey := sliced[0]
 	salt := sliced[1]
 	data := sliced[2]
