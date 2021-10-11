@@ -7,4 +7,4 @@ export KMS_KEY_ARN=$(docker-compose exec localstack aws --endpoint-url=http://lo
 docker-compose exec localstack aws --endpoint-url=http://localhost:4566 s3 rm s3://test --recursive
 docker-compose exec localstack aws --endpoint-url=http://localhost:4566 s3 mb s3://test
 docker-compose exec vault vault kv put /secret/foo/bar baz=bat
-go test ./... -coverprofile=coverage.out
+go test ./pkg/aws ./pkg/print ./pkg/vault -coverprofile=coverage.out
