@@ -45,21 +45,26 @@ func listExports(cmd *cobra.Command, args []string) error {
 	// explicitly right-aligned before printing.
 
 	if len(results) == 0 {
-		fmt.Printf("No results found at %s\n", s3path)
-	} else {
-		msg := message.NewPrinter(message.MatchLanguage("en"))
-		tab := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-
-		sizeStr := fmt.Sprintf("%15s", "Bytes")
-		fmt.Fprintf(tab, "Filename\t%s\t\n", sizeStr)
-		sizeStr = fmt.Sprintf("%15s", "---")
-		fmt.Fprintf(tab, "---\t%s\t\n", sizeStr)
-		for _, vv := range results {
-			fmt.Fprintf(tab, "%s\t%s\t\n", vv.Key, msg.Sprintf("%15d", vv.Size))
-		}
-		tab.Flush()
+		fmt.Printf("No results found at %s\nDone\n", s3path)
+		
+		return nil
 	}
-	fmt.Printf("\nDone\n")
+	
+       msg := message.NewPrinter(message.MatchLanguage("en"))
+       tab := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+ 
+       sizeStr := fmt.Sprintf("%15s", "Bytes")
+       fmt.Fprintf(tab, "Filename\t%s\t\n", sizeStr)
+       sizeStr = fmt.Sprintf("%15s", "---")
+
+       fmt.Fprintf(tab, "---\t%s\t\n", sizeStr)
+       
+       for _, vv := range results {
+               fmt.Fprintf(tab, "%s\t%s\t\n", vv.Key, msg.Sprintf("%15d", vv.Size))
+        }
+        
+       tab.Flush()
+       fmt.Printf("\nDone\n")
 
 	return nil
 }
