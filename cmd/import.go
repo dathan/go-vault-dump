@@ -80,6 +80,9 @@ func importVault(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+
+		defer os.RemoveAll(tmpDir)
+		
 		pathslices := strings.Split(filepath, "/")
 		filename := pathslices[len(pathslices)-1]
 		filepath = fmt.Sprintf("%s/%s", vault.EnsureNoTrailingSlash(tmpDir), filename)
@@ -89,12 +92,7 @@ func importVault(cmd *cobra.Command, args []string) error {
 			return errors.New(fmt.Sprintf("Error writing %s", filepath))
 		}
 	}
-	defer func() {
-		if fromS3 {
-			os.RemoveAll(tmpDir)
-		}
-	}()
-
+	
 	if err := loader.FromFile(filepath); err != nil {
 		return err
 	}
