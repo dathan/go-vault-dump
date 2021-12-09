@@ -183,19 +183,46 @@ func (c *Config) secretConsumer(ctx context.Context, secretChan chan map[string]
 			log.Println("Received signal to stop, stopping OverwriteSecret")
 			return
 		default:
-			if err := c.VaultConfig.OverwriteSecret(s["k"].(string), s["v"].(map[string]interface{})); err != nil {
-				errSlice := strings.Split(err.Error(), ":")
-				errID := strings.TrimSpace(errSlice[len(errSlice)-1])
-				count, ok := c.errInfo.count.LoadOrStore(errID, 1)
-				if ok {
-					ec := count.(int) // cast interface to integer
-					ec++              // increment
-					c.errInfo.count.Store(errID, ec)
-				}
 
-				log.Println(err.Error())
-				c.errInfo.data.Store(s["k"].(string), s["v"].(map[string]interface{}))
+			if s["v"] == nil {
+				log.Println("secret value is nil", s["k"])
+				return
+			}
+			secret, ok := s["v"].(map[string]interface{})
+			if !ok {
+				log.Println("type checking failed", s["k"])
+				return
+			}
+			if vault.IsPolicy(s["k"].(string)) {
+				name, hasName := secret["name"].(string)
+				rules, hasRules := secret["rules"].(string)
+				if hasName && hasRules && len(rules) > 0 {
+					err := c.VaultConfig.OverwritePolicy(name, rules)
+					if err != nil {
+						c.handleConsumerError(err, s)
+					}
+				} else {
+					log.Println("Warning: unhandled policy ", secret)
+				}
+			} else {
+				if err := c.VaultConfig.OverwriteSecret(s["k"].(string), secret); err != nil {
+					c.handleConsumerError(err, s)
+				}
 			}
 		}
 	}
+}
+
+func (c *Config) handleConsumerError(err error, secret map[string]interface{}) {
+	errSlice := strings.Split(err.Error(), ":")
+	errID := strings.TrimSpace(errSlice[len(errSlice)-1])
+	count, ok := c.errInfo.count.LoadOrStore(errID, 1)
+	if ok {
+		ec := count.(int) // cast interface to integer
+		ec++              // increment
+		c.errInfo.count.Store(errID, ec)
+	}
+
+	log.Println(err.Error())
+	c.errInfo.data.Store(secret["k"].(string), secret["v"].(map[string]interface{}))
 }
