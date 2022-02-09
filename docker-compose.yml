@@ -1,6 +1,10 @@
 ---
 version: "3"
 services:
+  vault-dump:
+    image: vault-dump:latest
+    build: .
+    platform: linux/amd64
   vault:
     container_name: vault
     image: vault:1.5.4

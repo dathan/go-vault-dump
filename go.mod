@@ -1,6 +1,6 @@
 module github.com/dathan/go-vault-dump
 
-go 1.12
+go 1.15
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.9.1

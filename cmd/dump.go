@@ -194,7 +194,7 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 	if output == "s3" {
 		srcPath := fmt.Sprintf("%s/%s.%s", outputPath, outputFilename, encoding)
 		dstPath := fmt.Sprintf("%s/%s.%s.%s", s3path, outputFilename, encoding, cryptExt)
-		plaintext, err := os.ReadFile(srcPath)
+		plaintext, err := ioutil.ReadFile(srcPath)
 		if err != nil {
 			// This is expected if no secrets were dumped
 			log.Println("Nothing to upload")
