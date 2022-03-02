@@ -19,6 +19,7 @@ const (
 	bufsize = 1000
 )
 
+var VaultDatabaseConfigPrefix = []string{"/database/config/"}
 var VaultPolicyPrefix = []string{"/sys/policy/"}
 var VaultPolicyProtected = []string{"/sys/policy/default", "/sys/policy/root"}
 
@@ -246,6 +247,15 @@ func (vc *Config) PurgePaths(paths []string) error {
 	return nil
 }
 
+// IsDatabaseConfig
+func IsDatabaseConfig(key string) bool {
+	for _, prefix := range VaultDatabaseConfigPrefix {
+		if strings.HasPrefix(key, EnsureNoTrailingSlash(prefix)) {
+			return true
+		}
+	}
+	return false
+}
 // IsPolicy
 func IsPolicy(key string) bool {
 	for _, prefix := range VaultPolicyPrefix {

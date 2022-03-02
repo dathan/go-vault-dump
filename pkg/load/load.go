@@ -19,6 +19,8 @@ import (
 	"golang.org/x/sync/syncmap"
 )
 
+var DatabaseConnectionDetailsKey = "connection_details"
+
 // Config
 type Config struct {
 	VaultConfig *vault.Config
@@ -205,6 +207,19 @@ func (c *Config) secretConsumer(ctx context.Context, secretChan chan map[string]
 					log.Println("Warning: unhandled policy ", secret)
 				}
 			} else {
+				if vault.IsDatabaseConfig(s["k"].(string)) {
+					for kk, vv := range secret {
+						if kk == DatabaseConnectionDetailsKey {
+							for cdk, cdv := range vv.(map[string]interface{}) {
+								secret[cdk] = cdv
+							}
+							delete(secret, DatabaseConnectionDetailsKey)
+						}
+					}
+					if err := c.VaultConfig.OverwriteSecret(s["k"].(string), secret); err != nil {
+						c.handleConsumerError(err, s)
+					}
+				}
 				if err := c.VaultConfig.OverwriteSecret(s["k"].(string), secret); err != nil {
 					c.handleConsumerError(err, s)
 				}
