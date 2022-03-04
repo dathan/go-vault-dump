@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"sync"
 
 	"github.com/dathan/go-vault-dump/pkg/file"
 	"github.com/dathan/go-vault-dump/pkg/print"
@@ -40,7 +41,10 @@ func (c *Config) Secrets() error {
 		return err
 	}
 
-	secretScraper.Run(c.InputPath, runtime.NumCPU())
+	var wg sync.WaitGroup
+
+	secretScraper.Run(c.InputPath, &wg, runtime.NumCPU())
+	wg.Wait()
 
 	if len(secretScraper.Data) == 0 {
 		log.Println("No secrets found")
