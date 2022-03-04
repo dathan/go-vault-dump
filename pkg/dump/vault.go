@@ -51,7 +51,7 @@ func NewSecretScraper(vc *vault.Config) (*SecretScraper, error) {
 }
 
 // Run creates n number of workers to secret info from found paths
-func (s *SecretScraper) Run(path string, n int) error {
+func (s *SecretScraper) Run(path string, wg *sync.WaitGroup, n int) error {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	for _, vv := range strings.Split(path, ",") {
@@ -66,11 +66,13 @@ func (s *SecretScraper) Run(path string, n int) error {
 
 	// once the secretStream is closed
 	// convert the stream into a map
-	go func() {
+	wg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
 		for secret := range s.secrets.channel {
 			s.Data[secret.path] = secret.data
 		}
-	}()
+	}(wg)
 
 	s.find.wg.Wait()
 	close(s.find.secretpath)
