@@ -31,14 +31,10 @@ var (
 	encoding   string
 	kubeconfig string
 	output     string
-	tmpdir     string
 	rootCmd    *cobra.Command
 
 	// https://goreleaser.com/environment/#using-the-mainversion
 	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-	builtBy = "unknown"
 )
 
 var (
@@ -145,14 +141,14 @@ func dumpVault(cmd *cobra.Command, args []string) error {
 	kmsKey := viper.GetString(kmsKeyFlag)
 	if output == "s3" {
 		if kmsKey == "" {
-			return errors.New("Error: KMS key must be specified for S3 upload")
+			return errors.New("error: KMS key must be specified for S3 upload")
 		}
 		if outputPath == "" {
-			return errors.New("Error: Must specify an output path for S3 upload")
+			return errors.New("error: Must specify an output path for S3 upload")
 		}
 		s3path = vault.EnsureNoTrailingSlash(outputPath)
 		if len(s3path) < 5 || s3path[:5] != "s3://" {
-			return errors.New("Error: Output path for S3 upload must begin with s3://")
+			return errors.New("error: Output path for S3 upload must begin with s3://")
 		}
 		outputPath, err = ioutil.TempDir("", "vault-dump-*")
 		if err != nil {
