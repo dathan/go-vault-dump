@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -82,17 +81,17 @@ func importVault(cmd *cobra.Command, args []string) error {
 		}
 
 		defer os.RemoveAll(tmpDir)
-		
+
 		pathslices := strings.Split(filepath, "/")
 		filename := pathslices[len(pathslices)-1]
 		filepath = fmt.Sprintf("%s/%s", vault.EnsureNoTrailingSlash(tmpDir), filename)
 		ok := file.WriteFile(filepath, plaintext)
 		if !ok {
 			os.RemoveAll(tmpDir)
-			return errors.New(fmt.Sprintf("Error writing %s", filepath))
+			return fmt.Errorf("error writing %s", filepath)
 		}
 	}
-	
+
 	if err := loader.FromFile(filepath); err != nil {
 		return err
 	}

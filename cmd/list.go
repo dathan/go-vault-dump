@@ -29,10 +29,10 @@ func listExports(cmd *cobra.Command, args []string) error {
 
 	s3path := args[0]
 	if s3path == "" {
-		return errors.New(fmt.Sprintf("'path' is a required argument but not found"))
+		return fmt.Errorf("'path' is a required argument but not found")
 	}
 	if len(s3path) < 5 || s3path[:5] != "s3://" {
-		return errors.New("Error: 'path' must begin with s3://")
+		return errors.New("error: 'path' must begin with s3://")
 	}
 
 	results, err := aws.S3List(s3path, "."+cryptExt)
@@ -46,25 +46,25 @@ func listExports(cmd *cobra.Command, args []string) error {
 
 	if len(results) == 0 {
 		fmt.Printf("No results found at %s\nDone\n", s3path)
-		
+
 		return nil
 	}
-	
-       msg := message.NewPrinter(message.MatchLanguage("en"))
-       tab := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
- 
-       sizeStr := fmt.Sprintf("%15s", "Bytes")
-       fmt.Fprintf(tab, "Filename\t%s\t\n", sizeStr)
-       sizeStr = fmt.Sprintf("%15s", "---")
 
-       fmt.Fprintf(tab, "---\t%s\t\n", sizeStr)
-       
-       for _, vv := range results {
-               fmt.Fprintf(tab, "%s\t%s\t\n", vv.Key, msg.Sprintf("%15d", vv.Size))
-        }
-        
-       tab.Flush()
-       fmt.Printf("\nDone\n")
+	msg := message.NewPrinter(message.MatchLanguage("en"))
+	tab := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+
+	sizeStr := fmt.Sprintf("%15s", "Bytes")
+	fmt.Fprintf(tab, "Filename\t%s\t\n", sizeStr)
+	sizeStr = fmt.Sprintf("%15s", "---")
+
+	fmt.Fprintf(tab, "---\t%s\t\n", sizeStr)
+
+	for _, vv := range results {
+		fmt.Fprintf(tab, "%s\t%s\t\n", vv.Key, msg.Sprintf("%15d", vv.Size))
+	}
+
+	tab.Flush()
+	fmt.Printf("\nDone\n")
 
 	return nil
 }
