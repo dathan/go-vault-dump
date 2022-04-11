@@ -31,26 +31,17 @@ var (
 	encoding   string
 	kubeconfig string
 	output     string
-	rootCmd    *cobra.Command
-
-	// https://goreleaser.com/environment/#using-the-mainversion
-	version = "dev"
+	dumpCmd    *cobra.Command
 )
 
 var (
 	Verbose bool
 )
 
-func exitErr(e error) {
-	log.SetOutput(os.Stderr)
-	log.Println(e)
-	os.Exit(1)
-}
-
 func init() {
-	rootCmd = &cobra.Command{
-		Use:   "vault-dump [flags] /vault/path[,...]",
-		Short: "dump secrets from Vault",
+	dumpCmd = &cobra.Command{
+		Use:   "dump [flags] /vault/path[,...]",
+		Short: "Dump secrets from Vault",
 		Args:  cobra.ExactArgs(1),
 		RunE:  dumpVault,
 	}
@@ -58,27 +49,28 @@ func init() {
 	logSetup()
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
-	rootCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
-	rootCmd.PersistentFlags().String(vtFlag, "", "vault token")
-	rootCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
-	rootCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
-	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
-	rootCmd.Flags().StringP(fileFlag, "f", "vault-dump", "output filename (.json or .yaml extension will be added)")
-	rootCmd.Flags().String(kmsKeyFlag, "", "KMS encryption key ARN (required for S3 uploads)")
-	rootCmd.Flags().StringP(destFlag, "d", "", "output directory or S3 path")
-	rootCmd.Flags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
-	rootCmd.Flags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file, s3]")
-	rootCmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
-	rootCmd.Version = version
+	dumpCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
+	dumpCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
+	dumpCmd.PersistentFlags().String(vtFlag, "", "vault token")
+	dumpCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
+	dumpCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
+	dumpCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	dumpCmd.Flags().StringP(fileFlag, "f", "vault-dump", "output filename (.json or .yaml extension will be added)")
+	dumpCmd.Flags().String(kmsKeyFlag, "", "KMS encryption key ARN (required for S3 uploads)")
+	dumpCmd.Flags().StringP(destFlag, "d", "", "output directory or S3 path")
+	dumpCmd.Flags().StringVarP(&encoding, "encoding", "e", "json", "encoding type [json, yaml]")
+	dumpCmd.Flags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file, s3]")
+	dumpCmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
 
-	viper.BindPFlag(ignorePathsFlag, rootCmd.PersistentFlags().Lookup(ignorePathsFlag))
-	viper.BindPFlag(ignoreKeysFlag, rootCmd.PersistentFlags().Lookup(ignoreKeysFlag))
-	viper.BindPFlag(vaFlag, rootCmd.PersistentFlags().Lookup(vaFlag))
-	viper.BindPFlag(vtFlag, rootCmd.PersistentFlags().Lookup(vtFlag))
-	viper.BindPFlag(fileFlag, rootCmd.Flags().Lookup(fileFlag))
-	viper.BindPFlag(destFlag, rootCmd.Flags().Lookup(destFlag))
-	viper.BindPFlag(kmsKeyFlag, rootCmd.Flags().Lookup(kmsKeyFlag))
+	viper.BindPFlag(ignorePathsFlag, dumpCmd.PersistentFlags().Lookup(ignorePathsFlag))
+	viper.BindPFlag(ignoreKeysFlag, dumpCmd.PersistentFlags().Lookup(ignoreKeysFlag))
+	viper.BindPFlag(vaFlag, dumpCmd.PersistentFlags().Lookup(vaFlag))
+	viper.BindPFlag(vtFlag, dumpCmd.PersistentFlags().Lookup(vtFlag))
+	viper.BindPFlag(fileFlag, dumpCmd.Flags().Lookup(fileFlag))
+	viper.BindPFlag(destFlag, dumpCmd.Flags().Lookup(destFlag))
+	viper.BindPFlag(kmsKeyFlag, dumpCmd.Flags().Lookup(kmsKeyFlag))
+
+	rootCmd.AddCommand(dumpCmd)
 }
 
 func initConfig() {
@@ -106,12 +98,6 @@ func logSetup() {
 	log.SetFlags(0)
 	if Verbose {
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
-	}
-}
-
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		exitErr(err)
 	}
 }
 

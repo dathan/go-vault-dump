@@ -5,10 +5,10 @@ default: build
 
 
 build:
-	cd ./cmd && go build ./...
+	go build -o bin/vault-tools main.go
 
 run:
-	time (go run ./cmd/vault-dump/main.go --config ./griffin.yml secret/wefi)
+	time (go run main.go --config ./griffin.yml secret/wefi)
 
 checks: fmt-check
 

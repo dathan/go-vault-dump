@@ -25,9 +25,6 @@ func init() {
 	var err error
 
 	AWSRegion = os.Getenv("AWS_REGION")
-	if AWSRegion == "" {
-		AWSRegion = DefaultAWSRegion
-	}
 
 	AWSEndpoint = os.Getenv("AWS_ENDPOINT")
 
