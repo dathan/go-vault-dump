@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 
 	"github.com/dathan/go-vault-dump/pkg/transform"
 	"github.com/spf13/cobra"
@@ -22,6 +23,7 @@ func init() {
 		RunE:  doTransform,
 	}
 	transformCmd.Flags().StringVarP(&applyPath, "apply", "a", "", "path to transform definition")
+	transformCmd.Flags().StringVarP(&destPath, "output", "o", "", "output path")
 	rootCmd.AddCommand(transformCmd)
 }
 
@@ -48,8 +50,26 @@ func doTransform(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	//TODO: better output options
-	fmt.Print(string(output))
+	if destPath == "" {
+		fmt.Print(string(output))
+	} else {
+
+		ff, err := os.Create(destPath)
+		if err != nil {
+			return err
+		}
+
+		err = ff.Chmod(UMASK)
+		if err != nil {
+			return err
+		}
+
+		_, err = ff.Write(output)
+		if err != nil {
+			return err
+		}
+
+	}
 
 	return nil
 }
