@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/dathan/go-vault-dump/pkg/aws"
 	"github.com/dathan/go-vault-dump/pkg/dump"
@@ -16,26 +15,17 @@ import (
 )
 
 const (
-	cryptExt        = "aes"
-	destFlag        = "dest"
-	fileFlag        = "filename"
-	ignoreKeysFlag  = "ignore-keys"
-	ignorePathsFlag = "ignore-paths"
-	kmsKeyFlag      = "kms-key"
-	vaFlag          = "vault-addr"
-	vtFlag          = "vault-token"
+	cryptExt   = "aes"
+	destFlag   = "dest"
+	fileFlag   = "filename"
+	kmsKeyFlag = "kms-key"
 )
 
 var (
-	cfgFile    string
 	encoding   string
 	kubeconfig string
 	output     string
 	dumpCmd    *cobra.Command
-)
-
-var (
-	Verbose bool
 )
 
 func init() {
@@ -46,15 +36,6 @@ func init() {
 		RunE:  dumpVault,
 	}
 
-	logSetup()
-	cobra.OnInitialize(initConfig)
-
-	dumpCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.vault-dump/config.yaml)")
-	dumpCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
-	dumpCmd.PersistentFlags().String(vtFlag, "", "vault token")
-	dumpCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
-	dumpCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
-	dumpCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 	dumpCmd.Flags().StringP(fileFlag, "f", "vault-dump", "output filename (.json or .yaml extension will be added)")
 	dumpCmd.Flags().String(kmsKeyFlag, "", "KMS encryption key ARN (required for S3 uploads)")
 	dumpCmd.Flags().StringP(destFlag, "d", "", "output directory or S3 path")
@@ -62,43 +43,11 @@ func init() {
 	dumpCmd.Flags().StringVarP(&output, "output", "o", "file", "output type, [stdout, file, s3]")
 	dumpCmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "k", "", "location of kube config file")
 
-	viper.BindPFlag(ignorePathsFlag, dumpCmd.PersistentFlags().Lookup(ignorePathsFlag))
-	viper.BindPFlag(ignoreKeysFlag, dumpCmd.PersistentFlags().Lookup(ignoreKeysFlag))
-	viper.BindPFlag(vaFlag, dumpCmd.PersistentFlags().Lookup(vaFlag))
-	viper.BindPFlag(vtFlag, dumpCmd.PersistentFlags().Lookup(vtFlag))
 	viper.BindPFlag(fileFlag, dumpCmd.Flags().Lookup(fileFlag))
 	viper.BindPFlag(destFlag, dumpCmd.Flags().Lookup(destFlag))
 	viper.BindPFlag(kmsKeyFlag, dumpCmd.Flags().Lookup(kmsKeyFlag))
 
 	rootCmd.AddCommand(dumpCmd)
-}
-
-func initConfig() {
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile) // Use config file from the flag.
-	} else {
-		viper.SetConfigName("config")            // name of config file (without extension)
-		viper.SetConfigType("yaml")              // REQUIRED if the config file does not have the extension in the name
-		viper.AddConfigPath("/etc/vault-dump/")  // path to look for the config file in
-		viper.AddConfigPath("$HOME/.vault-dump") // call multiple times to add many search paths
-	}
-
-	if err := viper.ReadInConfig(); err != nil { // Handle errors reading the config file
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			// Config file was found but another error was produced
-			exitErr(fmt.Errorf("fatal error config file: %v", err))
-		}
-	}
-	viper.SetEnvPrefix("VAULT_DUMP")
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
-	viper.AutomaticEnv()
-}
-
-func logSetup() {
-	log.SetFlags(0)
-	if Verbose {
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
-	}
 }
 
 func dumpVault(cmd *cobra.Command, args []string) error {

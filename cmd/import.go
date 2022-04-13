@@ -26,19 +26,8 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		RunE:  importVault,
 	}
-
-	importCmd.PersistentFlags().String(vaFlag, "https://127.0.0.1:8200", "vault url")
-	importCmd.PersistentFlags().String(vtFlag, "", "vault token")
-	importCmd.PersistentFlags().StringSlice(ignoreKeysFlag, []string{}, "comma separated list of key names to ignore")
-	importCmd.PersistentFlags().StringSlice(ignorePathsFlag, []string{}, "comma separated list of paths to ignore")
-	viper.BindPFlag(ignorePathsFlag, importCmd.PersistentFlags().Lookup(ignorePathsFlag))
-	viper.BindPFlag(ignoreKeysFlag, importCmd.PersistentFlags().Lookup(ignoreKeysFlag))
-	viper.BindPFlag(vaFlag, importCmd.PersistentFlags().Lookup(vaFlag))
-	viper.BindPFlag(vtFlag, importCmd.PersistentFlags().Lookup(vtFlag))
-
 	importCmd.Flags().BoolVarP(&Brute, "brute", "", false, "retry failed indefinitely")
 	importCmd.Flags().ParseErrorsWhitelist.UnknownFlags = true
-
 	rootCmd.AddCommand(importCmd)
 }
 
