@@ -1,0 +1,18 @@
+name: Build and Deploy to Dockerhub
+on:
+  push:
+    tags: '*'
+    branches: 'main'
+jobs:
+  deploy:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - run: echo "TAG=$( [[ ${GITHUB_REF_TYPE} == 'tag' ]] && echo ${GITHUB_REF_NAME} || echo 'latest')" >> $GITHUB_ENV
+      - run: docker build -t ${{ secrets.DOCKERHUB_REPO }}:${{ env.TAG }} .
+      - run: docker push ${{ secrets.DOCKERHUB_REPO }}:${{ env.TAG }}
