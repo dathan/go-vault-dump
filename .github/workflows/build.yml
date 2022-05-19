@@ -2,7 +2,7 @@ name: Build and Deploy to Dockerhub
 on:
   push:
     tags: '*'
-    branches: 'main'
+    branches: 'master'
 jobs:
   deploy:
     timeout-minutes: 5
