@@ -5,7 +5,7 @@ default: build
 
 
 build:
-	go build -o bin/vault-tools main.go
+	CGO_ENABLED=0 go build -a -o bin/vault-tools main.go
 
 run:
 	time (go run main.go --config ./griffin.yml secret/wefi)
